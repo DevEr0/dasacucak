@@ -261,7 +261,12 @@ function secClasses() {
     state.lang === "hy" ? "Ուսումնական պլանը՝ դասարան × առարկա = շաբաթական ժամ։ Տողի գումարը կարմրում է, եթե անցնում է դասարանի առավելագույն շաբաթական բեռը։"
                         : "The curriculum: class × subject = weekly hours. A row total turns red if it exceeds the grade's weekly ceiling."));
 
-  if (!subs.length) { panel().append(el("div", { class: "empty-note" }, state.lang === "hy" ? "Նախ ավելացրեք առարկաներ։" : "Add subjects first.")); return; }
+  if (!subs.length) {
+    panel().append(
+      el("div", { class: "empty-note" }, state.lang === "hy" ? "Նախ ավելացրեք առարկաներ։" : "Add subjects first."),
+      classAddRow());
+    return;
+  }
 
   const thead = el("tr", {},
     el("th", { class: "corner rowhead" }, state.lang === "hy" ? "Դասարան" : "Class"));
@@ -317,13 +322,31 @@ function secClasses() {
   const table = el("table", { class: "matrix" }, el("thead", {}, thead), body,
     el("tfoot", {}, el("tr", {}, el("td", { colspan: subs.length + 3 },
       state.lang === "hy" ? "Դատարկ վանդակ = առարկան չի դասավանդվում այդ դասարանում" : "Empty cell = subject not taught in that class"))));
-  panel().append(el("div", { class: "matrix-wrap" }, table),
-    el("div", { class: "addrow" }, el("button", { class: "btn subtle small", on: { click: addClass } }, "+ " + t("add"))));
+  panel().append(el("div", { class: "matrix-wrap" }, table), classAddRow());
+}
+function classAddRow() {
+  return el("div", { class: "addrow" },
+    el("button", { class: "btn subtle small", on: { click: addClass } }, "+ " + t("add")),
+    el("button", { class: "btn subtle small", on: { click: addGrades1to12 } },
+      state.lang === "hy" ? "Ավելացնել 1–12 դասարանները" : "Add grades 1–12"));
 }
 function addClass() {
   const id = nextClassName();
   state.school.classes[id] = { grade: 7, home_room: "", weekly_hours: {} };
   render();
+}
+function addGrades1to12() {
+  let added = 0;
+  for (let g = 1; g <= 12; g++) {
+    const name = String(g);
+    if (state.school.classes[name]) continue;     // don't clobber an existing class
+    state.school.classes[name] = { grade: g, home_room: "", weekly_hours: {} };
+    added++;
+  }
+  render();
+  toast(state.lang === "hy"
+    ? (added ? `Ավելացվեց ${added} դասարան` : "Բոլոր 1–12 դասարաններն արդեն կան")
+    : (added ? `Added ${added} class${added === 1 ? "" : "es"}` : "Grades 1–12 already exist"));
 }
 function nextClassName() {
   let i = Object.keys(state.school.classes).length + 1;
@@ -372,14 +395,8 @@ function secTeachers() {
       roleSel.append(o);
     });
 
-    // available days Mon-Fri
-    const dayBox = el("div", { class: "daybox" });
-    for (let d = 0; d < 5; d++) {
-      const on = tch.available_days.length === 0 || tch.available_days.includes(d);
-      const lab = el("label", { class: on ? "on" : "", title: DAYS[state.lang][d] }, DAYS_SHORT[state.lang][d]);
-      lab.addEventListener("click", () => toggleDay(tch, d));
-      dayBox.append(lab);
-    }
+    // availability: per-weekday choose-your-periods editor
+    const availCell = availabilityEditor(tch, periodsPerDay());
 
     return el("tr", {},
       el("td", {}, el("input", { type: "text", value: tch.name || "", placeholder: state.lang === "hy" ? "Անուն Ազգանուն" : "Full name",
@@ -390,31 +407,104 @@ function secTeachers() {
         value: tch.max_weekly_load ?? "", placeholder: state.lang === "hy" ? "ավտո" : "auto",
         title: state.lang === "hy" ? "Դատարկ = ըստ դերի (18/20)" : "Empty = by role (18/20)",
         on: { input: e => (tch.max_weekly_load = e.target.value ? clampInt(e.target.value, 1, 36, null) : null) } })),
-      el("td", {}, dayBox),
+      el("td", {}, availCell),
       el("td", { class: "act" }, rmBtn(() => { delete state.school.teachers[tid]; render(); })),
     );
   });
   const H = state.lang === "hy"
-    ? ["Անուն", "Որակավորում (առարկաներ)", "Դեր", "Բեռ/շաբ", "Հասանելի օրեր"]
-    : ["Name", "Qualified subjects", "Role", "Load/wk", "Available days"];
+    ? ["Անուն", "Որակավորում (առարկաներ)", "Դեր", "Բեռ/շաբ", "Հասանելիություն"]
+    : ["Name", "Qualified subjects", "Role", "Load/wk", "Availability"];
   panel().append(
     head(t("navTeachers"),
       state.lang === "hy" ? "Ուսուցիչներն ու իրենց որակավորումները։ Դասերն ինքնաշխատ բաշխվում են որակավորման հիման վրա, եթե ձեռքով չեք ամրագրում։"
                           : "Teachers and their qualifications. Lessons are auto-assigned from qualifications unless you pin them."),
     dataTable(H, rows, 6),
+    el("p", { class: "sub", style: "margin-top:8px" },
+      state.lang === "hy"
+        ? "Հասանելիություն․ սեղմեք օրվա պիտակին՝ ամբողջ օրն անջատելու/միացնելու համար, կամ առանձին ժամերի վրա։ Լրացված = հասանելի (լռելյայն՝ բոլոր ժամերը)։"
+        : "Availability: click a weekday label to switch the whole day off/on, or click individual periods. Filled = available (default is every period)."),
     el("div", { class: "addrow" }, el("button", { class: "btn subtle small", on: { click: addTeacher } }, "+ " + t("add"))),
   );
 }
-function toggleDay(tch, d) {
-  let days = tch.available_days.length ? [...tch.available_days] : [0, 1, 2, 3, 4];
-  if (days.includes(d)) days = days.filter(x => x !== d); else days.push(d);
-  days.sort();
-  tch.available_days = days.length === 5 ? [] : days;  // all-5 stored as "no restriction"
+
+/* periods available in the current school (used to size the availability grid) */
+function periodsPerDay() { return Math.max(1, state.school.periods_per_day || 7); }
+
+/* Build the per-weekday period editor for one teacher. */
+function availabilityEditor(tch, P) {
+  migrateAvailability(tch, P);
+  const map = tch.available_periods_by_day;
+  const box = el("div", { class: "availbox" });
+  for (let d = 0; d < 5; d++) {
+    const dayOff = Object.prototype.hasOwnProperty.call(map, d) && (map[d] || []).length === 0;
+    const allowed = dayAllowed(tch, d, P);
+    const row = el("div", { class: "avail-day" + (dayOff ? " off" : "") });
+    row.append(el("button", { type: "button", title: DAYS[state.lang][d],
+      class: "avail-daylabel" + (dayOff ? "" : " on"),
+      on: { click: () => toggleDayFull(tch, d, P) } }, DAYS_SHORT[state.lang][d]));
+    const pills = el("div", { class: "avail-pills" });
+    for (let p = 1; p <= P; p++) {
+      const on = !dayOff && allowed.has(p);
+      pills.append(el("button", { type: "button", title: PP[state.lang] + p,
+        class: "avail-pill" + (on ? " on" : ""),
+        on: { click: () => togglePeriod(tch, d, p, P) } }, String(p)));
+    }
+    row.append(pills);
+    box.append(row);
+  }
+  return box;
+}
+
+/* Periods allowed for a day, as a Set. Absent day => every period. */
+function dayAllowed(tch, d, P) {
+  const map = tch.available_periods_by_day || {};
+  if (Object.prototype.hasOwnProperty.call(map, d)) return new Set(map[d] || []);
+  return new Set(Array.from({ length: P }, (_, i) => i + 1));
+}
+
+/* Toggle a single period for one weekday. */
+function togglePeriod(tch, d, period, P) {
+  const map = tch.available_periods_by_day = tch.available_periods_by_day || {};
+  const cur = dayAllowed(tch, d, P);
+  if (cur.has(period)) cur.delete(period); else cur.add(period);
+  const arr = Array.from(cur).sort((a, b) => a - b);
+  if (arr.length === P) delete map[d];   // full day => default (store nothing)
+  else map[d] = arr;                      // [] => whole day off
   render();
+}
+
+/* Toggle a whole weekday off/on. */
+function toggleDayFull(tch, d, P) {
+  const map = tch.available_periods_by_day = tch.available_periods_by_day || {};
+  const dayOff = Object.prototype.hasOwnProperty.call(map, d) && (map[d] || []).length === 0;
+  if (dayOff) delete map[d];   // turn the day fully on
+  else map[d] = [];            // turn the day fully off
+  render();
+}
+
+/* One-time conversion of legacy available_days/available_periods into the
+   per-weekday model so older data (and the sample) shows correctly. */
+function migrateAvailability(tch, P) {
+  const cur = tch.available_periods_by_day;
+  if (cur && typeof cur === "object" && !Array.isArray(cur)) return;  // already new-style
+  const map = {};
+  const days = (tch.available_days && tch.available_days.length) ? tch.available_days.slice() : [0, 1, 2, 3, 4];
+  const periods = (tch.available_periods && tch.available_periods.length) ? tch.available_periods.slice() : null;
+  for (let d = 0; d < 5; d++) {
+    if (!days.includes(d)) { map[d] = []; continue; }      // legacy day-off
+    if (periods) {
+      const allowed = periods.filter(p => p >= 1 && p <= P).sort((a, b) => a - b);
+      if (allowed.length !== P) map[d] = allowed;           // legacy period restriction
+    }
+  }
+  tch.available_periods_by_day = map;
+  tch.available_days = [];
+  tch.available_periods = [];
 }
 function addTeacher() {
   const id = uid("t");
-  state.school.teachers[id] = { name: "", qualified_subjects: [], role: "subject", max_weekly_load: null, available_days: [], available_periods: [] };
+  state.school.teachers[id] = { name: "", qualified_subjects: [], role: "subject",
+    max_weekly_load: null, available_days: [], available_periods: [], available_periods_by_day: {} };
   render();
 }
 

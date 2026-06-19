@@ -13,6 +13,20 @@ def load_school(path: str) -> School:
         return build_school(json.load(fh))
 
 
+def _parse_periods_by_day(raw_val) -> dict:
+    """Normalize {"0": [1,2,3], ...} (JSON string keys) into {0: [1,2,3], ...}."""
+    out: dict = {}
+    if isinstance(raw_val, dict):
+        for k, v in raw_val.items():
+            try:
+                day = int(k)
+            except (TypeError, ValueError):
+                continue
+            periods = sorted({int(p) for p in (v or [])})
+            out[day] = periods
+    return out
+
+
 def build_school(raw: dict) -> School:
     subjects = {
         sid: Subject(
@@ -48,6 +62,8 @@ def build_school(raw: dict) -> School:
             max_weekly_load=t.get("max_weekly_load"),
             available_days=list(t.get("available_days", [])),
             available_periods=list(t.get("available_periods", [])),
+            available_periods_by_day=_parse_periods_by_day(
+                t.get("available_periods_by_day", {})),
         )
         for tid, t in raw["teachers"].items()
     }

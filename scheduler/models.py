@@ -43,8 +43,13 @@ class Teacher:
     qualified_subjects: list = field(default_factory=list)
     role: str = "subject"                    # primary | subject | admin
     max_weekly_load: Optional[int] = None
-    available_days: list = field(default_factory=list)
-    available_periods: list = field(default_factory=list)
+    available_days: list = field(default_factory=list)        # legacy (kept for back-compat)
+    available_periods: list = field(default_factory=list)     # legacy (kept for back-compat)
+    # Preferred availability model: per-weekday list of periods the teacher can work.
+    # Maps day index (0=Mon) -> sorted list of available period numbers.
+    #   * a day ABSENT from the map  -> available every period that day (the default);
+    #   * a day mapped to []          -> unavailable the whole day.
+    available_periods_by_day: dict = field(default_factory=dict)
 
     def resolved_cap(self) -> int:
         if self.max_weekly_load is not None:
@@ -52,6 +57,12 @@ class Teacher:
         return {"primary": 18, "subject": 20, "admin": 12}.get(self.role, 20)
 
     def can_work(self, day_idx: int, period: int) -> bool:
+        # Per-weekday model takes precedence when present.
+        if self.available_periods_by_day:
+            if day_idx in self.available_periods_by_day:
+                return period in self.available_periods_by_day[day_idx]
+            return True  # day not listed => available all periods
+        # Legacy fallback for older data files.
         if self.available_days and day_idx not in self.available_days:
             return False
         if self.available_periods and period not in self.available_periods:

@@ -534,10 +534,14 @@ async function solve() {
   if (probs) { toast(probs, true); return; }
   showOverlay(true);
   try {
+    const ctrl = new AbortController();
+    const id = setTimeout(() => ctrl.abort(), 90000); // 90s max
     const res = await fetch("/api/solve", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ school: state.school, max_seconds: state.maxSeconds, workers: 8 }),
+      signal: ctrl.signal,
     });
+    clearTimeout(id);
     const data = await res.json();
     if (!data.ok) { showOverlay(false); reportProblem(data); return; }
     state.result = data; state.resultView = "classes"; state.resultPick = null; state.section = "result";
@@ -590,7 +594,8 @@ function saveBlob(text, name, type) {
 
 async function loadSample() {
   try {
-    const res = await fetch("/api/sample"); const raw = await res.json();
+    const res = await fetchWithTimeout("/api/sample");
+    const raw = await res.json();
     state.school = normalize(raw); state.result = null; state.section = "settings";
     if (raw.periods_per_day) state.school.periods_per_day = raw.periods_per_day;
     render(); toast(state.lang === "hy" ? "Նմուշը բեռնված է" : "Sample loaded");
@@ -655,9 +660,18 @@ function hasWork() {
          Object.keys(s.teachers).length || Object.keys(s.rooms).length;
 }
 
+function fetchWithTimeout(url, ms = 8000) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(id));
+}
+
 async function init() {
   wire();
-  try { state.defaults = await (await fetch("/api/defaults")).json(); } catch (e) { state.defaults = null; }
+  try {
+    state.defaults = await (await fetchWithTimeout("/api/defaults")).json();
+  } catch (e) { state.defaults = null; }
+
   const saved = loadLocal();
   if (saved) {
     state.school = normalize(saved.school);
@@ -666,9 +680,11 @@ async function init() {
     render();
     toast(state.lang === "hy" ? "Վերականգնվեց ձեր վերջին աշխատանքը" : "Restored your last work");
   } else {
-    try { await loadSample(); } catch (e) { /* fall through to safety render */ }
+    try { await loadSample(); } catch (e) {
+      state.school = blankSchool(); render();
+    }
   }
-  // never leave a blank page, even if the network failed
+  // never leave a blank page no matter what
   if (!panel().children.length) { state.school = state.school || blankSchool(); render(); }
 }
 init();

@@ -220,7 +220,7 @@ table.tt .r{display:block; color:var(--accent-deep); font-size:11px}
 
 /* ---------- overlay + toast ---------- */
 .overlay{position:fixed; inset:0; background:rgba(28,34,48,.45); backdrop-filter:blur(2px);
-  display:grid; place-items:center; z-index:50}
+  display:none; place-items:center; z-index:50}
 .overlay p{color:#fff; margin-top:16px; font-weight:600; letter-spacing:.3px}
 .overlay > div{display:contents}
 .spinner{width:46px; height:46px; border-radius:50%; border:4px solid rgba(255,255,255,.25);

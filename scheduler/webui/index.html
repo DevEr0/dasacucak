@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Դասացուցակ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Armenian:wght@500;600;700&family=Noto+Sans+Armenian:wght@400;500;600;700&family=Noto+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="mark">Դ</div>
+    <div class="brand-text">
+      <h1>Դասացուցակ</h1>
+      <p data-i18n="tagline">Դպրոցի դասացուցակ կազմող</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <div class="seg" id="lang-toggle" role="group" aria-label="Language">
+      <button data-lang="hy" class="on">Հայ</button>
+      <button data-lang="en">EN</button>
+    </div>
+    <button class="btn ghost" id="btn-sample" data-i18n="loadSample">Բեռնել նմուշը</button>
+    <button class="btn ghost" id="btn-import" data-i18n="import">Ներմուծել</button>
+    <button class="btn ghost" id="btn-export" data-i18n="export">Արտահանել</button>
+    <button class="btn primary" id="btn-generate" data-i18n="generate">Կազմել դասացուցակը</button>
+    <input type="file" id="file-input" accept="application/json" hidden>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="rail" id="rail">
+    <button data-sec="settings" class="on"><span class="ic">⚙</span><span data-i18n="navSettings">Կարգավորումներ</span></button>
+    <button data-sec="subjects"><span class="ic">▦</span><span data-i18n="navSubjects">Առարկաներ</span></button>
+    <button data-sec="rooms"><span class="ic">⌂</span><span data-i18n="navRooms">Սենյակներ</span></button>
+    <button data-sec="classes"><span class="ic">☷</span><span data-i18n="navClasses">Դասարաններ</span></button>
+    <button data-sec="teachers"><span class="ic">✎</span><span data-i18n="navTeachers">Ուսուցիչներ</span></button>
+    <div class="rail-div"></div>
+    <button data-sec="result" id="nav-result" disabled><span class="ic">▤</span><span data-i18n="navResult">Դասացուցակ</span></button>
+  </nav>
+
+  <main class="panel" id="panel">
+    <!-- sections injected here -->
+  </main>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="spinner"></div>
+  <p id="overlay-msg" data-i18n="solving">Կազմվում է…</p>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

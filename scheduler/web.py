@@ -18,11 +18,12 @@ import tempfile
 from flask import Flask, jsonify, request, send_from_directory
 
 from . import curriculum as C
-from .assigner import AssignmentError, build_assignments, preflight
+from .assigner import (AssignmentError, assign_teachers, build_units,
+                       preflight)
 from .htmlexport import export_html
 from .loader import build_school
-from .solver import solve
-from .validator import validate
+from .solver import diagnose, solve
+from .validator import is_acceptable, validate
 
 HERE = os.path.dirname(__file__)
 WEBUI = os.path.join(HERE, "webui")
@@ -51,6 +52,9 @@ def defaults():
         "morning_last_period": C.MORNING_LAST_PERIOD,
         "roles": ["primary", "subject", "admin"],
         "weights_default": C.WEIGHTS_DEFAULT,
+        "relaxable_rules": C.RELAXABLE_RULES,
+        "split_default": sorted(C.SPLIT_DEFAULT),
+        "legal_teacher_max": C.LEGAL_TEACHER_MAX,
     })
 
 
@@ -75,31 +79,55 @@ def api_solve():
         return jsonify({"ok": False, "stage": "input",
                         "message": f"The school could not be read: {e}"})
 
+    units = build_units(school)
+    allow_overload = school.compliance.is_relaxed("teacher_weekly_cap")
     try:
-        assignments = build_assignments(school)
+        teacher_of, assign_warnings = assign_teachers(school, units,
+                                                      allow_overload=allow_overload)
     except AssignmentError as e:
         return jsonify({"ok": False, "stage": "assignment", "message": str(e)})
 
-    problems = preflight(school, assignments)
-    if problems:
-        return jsonify({"ok": False, "stage": "preflight", "problems": problems})
+    fatal, legal_pre = preflight(school, units, teacher_of)
+    if fatal:
+        return jsonify({"ok": False, "stage": "preflight", "problems": fatal})
 
-    result = solve(school, assignments, max_seconds, workers)
+    result = solve(school, units, teacher_of, max_seconds, workers)
     if result.status not in ("OPTIMAL", "FEASIBLE"):
-        return jsonify({"ok": False, "stage": "infeasible",
-                        "message": "No timetable satisfies all hard constraints. "
-                                   "Loosen a limit (teacher availability, room "
-                                   "count, lessons/day) and try again."})
+        # Explain WHY: build the assumption-guarded model and extract a
+        # minimal set of conflicting rule groups (the infeasibility page).
+        diag = []
+        if result.status == "INFEASIBLE":
+            diag = diagnose(school, units, teacher_of,
+                            max_seconds=min(max_seconds, 25))
+        return jsonify({
+            "ok": False, "stage": "infeasible", "status": result.status,
+            "diagnosis": diag,
+            "relaxable": {r: C.RELAXABLE_RULES[r]
+                          for r in {d["rule"] for d in diag}
+                          if r in C.RELAXABLE_RULES},
+            "message": ("The solver ran out of time before finding a "
+                        "timetable or proving none exists. Raise the time "
+                        "budget and retry." if result.status != "INFEASIBLE"
+                        else "No timetable satisfies every enforced rule."),
+        })
 
-    violations = validate(school, result.lessons)
+    report = validate(school, result.lessons)
+    if report["hard"]:
+        # defence in depth: should never happen
+        return jsonify({"ok": False, "stage": "validation",
+                        "problems": report["hard"]})
+
     lessons = [vars(L) for L in result.lessons]
-
     return jsonify({
         "ok": True,
         "status": result.status,
         "objective": result.objective,
         "wall_time": result.wall_time,
-        "violations": violations,
+        "violations": report,                       # {"hard": [], "legal": [...]}
+        "assign_warnings": assign_warnings,
+        "compliance_mode": school.compliance.mode,
+        "relaxed_rules": result.relaxed_rules,
+        "acceptable": is_acceptable(school, report),
         "lessons": lessons,
         "quality": _quality(school, result.lessons),
     })
@@ -131,7 +159,12 @@ def _quality(school, lessons):
     afternoon_hard = 0
     for L in lessons:
         by_td[(L.teacher_id, L.day)].append(L.period)
-        class_daily[L.class_id][L.day] += 1
+        if L.kind == "elective":
+            grp = school.elective_groups.get(L.group_id)
+            for cid in (grp.member_classes if grp else []):
+                class_daily[cid][L.day] += 1
+        elif not (L.kind == "split" and L.subgroup == 2):
+            class_daily[L.class_id][L.day] += 1
         subj = school.subjects[L.subject_id]
         if subj.difficulty >= C.HARD_THRESHOLD and L.period > C.MORNING_LAST_PERIOD:
             afternoon_hard += 1

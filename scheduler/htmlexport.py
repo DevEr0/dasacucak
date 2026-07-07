@@ -29,38 +29,64 @@ def _subject_name(school: School, sid: str, lang: str) -> str:
 
 
 def _grid_index(lessons, key_fn):
-    """Map (day, period) -> PlacedLesson for one entity."""
-    g: dict[tuple, PlacedLesson] = {}
+    """Map (day, period) -> [PlacedLesson] for one entity (slots may hold
+    several lessons: paired subgroups, parallel elective groups)."""
+    g: dict[tuple, list] = {}
     for L in lessons:
-        k = key_fn(L)
-        if k is not None:
-            g[(L.day, L.period)] = L
+        if key_fn(L) is not None:
+            g.setdefault((L.day, L.period), []).append(L)
+    for ls in g.values():
+        ls.sort(key=lambda L: (L.subgroup, L.group_id))
     return g
 
 
-def _class_cell(school, L, lang):
-    if L is None:
-        return '<td class="empty">—</td>'
-    name = html.escape(_subject_name(school, L.subject_id, lang))
-    subj = school.subjects[L.subject_id]
-    room = school.rooms[L.room_id]
-    cls = "cell hard" if subj.difficulty >= HARD_THRESHOLD else "cell"
-    extra = ""
-    # show room only when it is a specialised room (matches the text renderer)
-    if subj.requires_room_type:
-        extra = f'<span class="room">{html.escape(room.name)}</span>'
-    teacher = html.escape(school.teachers[L.teacher_id].name)
-    return f'<td class="{cls}"><span class="subj">{name}</span>{extra}<span class="who">{teacher}</span></td>'
+def _lesson_tag(school, L, lang):
+    """Subject name decorated with subgroup / elective-group markers."""
+    name = _subject_name(school, L.subject_id, lang)
+    if L.kind == "split":
+        name += _t(lang, f" (խումբ {L.subgroup})", f" (group {L.subgroup})")
+    if L.kind == "elective":
+        grp = school.elective_groups.get(L.group_id)
+        name = f"«{grp.name if grp else L.group_id}» {name}"
+    return html.escape(name)
 
 
-def _teacher_cell(school, L, lang):
-    if L is None:
+def _class_cell(school, ls, lang):
+    if not ls:
         return '<td class="empty">—</td>'
-    name = html.escape(_subject_name(school, L.subject_id, lang))
+    hard = any(school.subjects[L.subject_id].difficulty >= HARD_THRESHOLD
+               for L in ls)
+    cls = "cell hard" if hard else "cell"
+    inner = []
+    for L in ls:
+        subj = school.subjects[L.subject_id]
+        extra = ""
+        if subj.requires_room_type:
+            room = school.rooms.get(L.room_id)
+            extra = ('<span class="room">'
+                     + html.escape(room.name if room else L.room_id) + '</span>')
+        teacher = html.escape(school.teachers[L.teacher_id].name)
+        inner.append('<span class="subj">' + _lesson_tag(school, L, lang)
+                     + '</span>' + extra
+                     + '<span class="who">' + teacher + '</span>')
+    return f'<td class="{cls}">' + '<hr class="pair">'.join(inner) + '</td>'
+
+
+def _teacher_cell(school, ls, lang):
+    if not ls:
+        return '<td class="empty">—</td>'
+    L = ls[0]
     subj = school.subjects[L.subject_id]
     cls = "cell hard" if subj.difficulty >= HARD_THRESHOLD else "cell"
-    cid = html.escape(L.class_id)
-    return f'<td class="{cls}"><span class="who">{cid}</span><span class="subj">{name}</span></td>'
+    who = L.class_id
+    if L.kind == "elective":
+        grp = school.elective_groups.get(L.group_id)
+        who = f"«{grp.name if grp else L.group_id}»"
+    elif L.kind == "split":
+        who += f"/{L.subgroup}"
+    name = html.escape(_subject_name(school, L.subject_id, lang))
+    return (f'<td class="{cls}"><span class="who">{html.escape(who)}</span>'
+            f'<span class="subj">{name}</span></td>')
 
 
 def _table(school, grid, lang, cell_fn):
@@ -97,8 +123,10 @@ def export_html(school: School, lessons: list[PlacedLesson],
 
     # ---- per-class grids -------------------------------------------------
     parts.append(f"<h2>{html.escape(h_classes)}</h2>")
+    from .render import lessons_of_class
     for cid in sorted(school.classes):
-        grid = _grid_index(lessons, lambda L, c=cid: L if L.class_id == c else None)
+        mine = lessons_of_class(school, lessons, cid)
+        grid = _grid_index(mine, lambda L: L)
         parts.append(f'<section><h3>{html.escape(cid)}</h3>'
                      + _table(school, grid, lang, _class_cell) + "</section>")
 
@@ -157,6 +185,7 @@ _PAGE = """<!DOCTYPE html>
   .subj { display: block; font-weight: 600; }
   .who  { display: block; color: var(--muted); font-size: 11px; }
   .room { display: block; color: var(--accent); font-size: 11px; }
+  hr.pair { border: 0; border-top: 1px dashed var(--line); margin: 4px 0; }
   .legend { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
   .legend .swatch { display:inline-block; width:11px; height:11px;
                     background:var(--hard); border:1px solid #e6b9af;

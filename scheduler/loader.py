@@ -4,8 +4,9 @@ from __future__ import annotations
 import json
 
 from . import curriculum as C
-from .models import (DEFAULT_DAYS_EN, DEFAULT_DAYS_HY, GradeRule, Room, School,
-                     SchoolClass, Subject, Teacher, TeachingAssignment)
+from .models import (DEFAULT_DAYS_EN, DEFAULT_DAYS_HY, Compliance, ElectiveGroup,
+                     GradeRule, Room, School, SchoolClass, Subject, Teacher,
+                     TeachingAssignment)
 
 
 def load_school(path: str) -> School:
@@ -38,6 +39,7 @@ def build_school(raw: dict) -> School:
             is_pe=s.get("is_pe", sid in C.PE_SUBJECTS),
             max_consecutive=s.get("max_consecutive", 1),
             max_per_day=s.get("max_per_day", 1),
+            splittable=s.get("splittable", sid in C.SPLIT_DEFAULT),
         )
         for sid, s in raw["subjects"].items()
     }
@@ -50,9 +52,26 @@ def build_school(raw: dict) -> School:
 
     classes = {
         cid: SchoolClass(id=cid, grade=c["grade"], home_room=c["home_room"],
-                         weekly_hours=dict(c["weekly_hours"]))
+                         weekly_hours=dict(c["weekly_hours"]),
+                         split=bool(c.get("split", False)),
+                         split_subjects=(list(c["split_subjects"])
+                                         if c.get("split_subjects") is not None else None))
         for cid, c in raw["classes"].items()
     }
+
+    elective_groups = {
+        gid: ElectiveGroup(
+            id=gid, name=g.get("name", gid), band=g.get("band", "band1"),
+            member_classes=[c for c in g.get("member_classes", []) if c in classes],
+            weekly_hours={s: int(h) for s, h in g.get("weekly_hours", {}).items()
+                          if int(h) > 0},
+        )
+        for gid, g in raw.get("elective_groups", {}).items()
+    }
+
+    craw = raw.get("compliance", {}) or {}
+    compliance = Compliance(mode=craw.get("mode", "strict"),
+                            relax=set(craw.get("relax", [])))
 
     teachers = {
         tid: Teacher(
@@ -68,7 +87,9 @@ def build_school(raw: dict) -> School:
         for tid, t in raw["teachers"].items()
     }
 
-    assignments = [TeachingAssignment(a["class_id"], a["subject_id"], a["teacher_id"])
+    assignments = [TeachingAssignment(a.get("class_id", ""), a["subject_id"],
+                                      a["teacher_id"], a.get("subgroup", 0),
+                                      a.get("group_id", ""))
                    for a in raw.get("assignments", [])]
 
     grade_rules = {}
@@ -91,4 +112,5 @@ def build_school(raw: dict) -> School:
         reserved_break_period=sc.get("reserved_break_period"),
         grade_rules=grade_rules, subjects=subjects, classes=classes,
         teachers=teachers, rooms=rooms, assignments=assignments, weights=weights,
+        elective_groups=elective_groups, compliance=compliance,
     )

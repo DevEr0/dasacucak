@@ -18,6 +18,7 @@ class Subject:
     is_pe: bool = False
     max_consecutive: int = 1
     max_per_day: int = 1
+    splittable: bool = False                 # may be taught to a class in two subgroups
 
     @property
     def name(self) -> str:
@@ -30,10 +31,21 @@ class SchoolClass:
     grade: int
     home_room: str
     weekly_hours: dict = field(default_factory=dict)
+    split: bool = False                      # class is big enough to split subgroup subjects
+    split_subjects: Optional[list] = None    # explicit override; None => all splittable subjects
 
     @property
     def weekly_total(self) -> int:
         return sum(self.weekly_hours.values())
+
+    def split_subject_ids(self, subjects: dict) -> set:
+        """Which of this class's subjects are taught in two subgroups."""
+        if not self.split:
+            return set()
+        if self.split_subjects is not None:
+            return {s for s in self.split_subjects if s in self.weekly_hours}
+        return {s for s in self.weekly_hours
+                if s in subjects and subjects[s].splittable}
 
 
 @dataclass
@@ -83,6 +95,8 @@ class TeachingAssignment:
     class_id: str
     subject_id: str
     teacher_id: str
+    subgroup: int = 0        # 0 = whole class; 1|2 pins one subgroup of a split subject
+    group_id: str = ""       # non-empty pins an elective group's subject
 
 
 @dataclass
@@ -106,6 +120,18 @@ class School:
     rooms: dict
     assignments: list
     weights: dict = field(default_factory=dict)
+    elective_groups: dict = field(default_factory=dict)   # id -> ElectiveGroup
+    compliance: "Compliance" = None
+
+    def __post_init__(self):
+        if self.compliance is None:
+            self.compliance = Compliance()
+
+    def groups_of_class(self, cid: str) -> list:
+        return [g for g in self.elective_groups.values() if cid in g.member_classes]
+
+    def bands_of_class(self, cid: str) -> list:
+        return sorted({g.band for g in self.groups_of_class(cid)})
 
     @property
     def n_days(self) -> int:
@@ -116,3 +142,71 @@ class School:
 
     def rooms_of_type(self, room_type: str) -> list:
         return [r for r in self.rooms.values() if r.type == room_type]
+
+
+# --------------------------------------------------------------------------
+# Units: everything the solver can place is one of these three kinds.
+#   class    – a whole-class lesson (the classic case)
+#   split    – one subgroup (1 or 2) of a class, for splittable subjects
+#   elective – a cross-class stream/elective group (grades 10-12 հոսքեր)
+# --------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Unit:
+    uid: str
+    kind: str                    # "class" | "split" | "elective"
+    subject_id: str
+    hours: int
+    class_id: str = ""           # class / split kinds
+    subgroup: int = 0            # 1 | 2 for split
+    group_id: str = ""           # elective kind
+    member_classes: tuple = ()   # elective kind
+    band: str = ""               # elective kind
+
+    def label(self) -> str:
+        if self.kind == "split":
+            return f"{self.class_id}/{self.subject_id}#g{self.subgroup}"
+        if self.kind == "elective":
+            return f"{self.group_id}/{self.subject_id}"
+        return f"{self.class_id}/{self.subject_id}"
+
+
+@dataclass
+class ElectiveGroup:
+    """A stream/elective group: students drawn from several classes who meet
+    together for their chosen subjects.  Groups that share member classes but
+    have DISJOINT student sets are put in the same *band* and may run in
+    parallel; groups in different bands never overlap for a shared class."""
+    id: str
+    name: str
+    band: str
+    member_classes: list = field(default_factory=list)
+    weekly_hours: dict = field(default_factory=dict)
+
+    @property
+    def weekly_total(self) -> int:
+        return sum(self.weekly_hours.values())
+
+
+@dataclass
+class Compliance:
+    """How strictly the legal/regulatory rules are enforced.
+
+    mode:
+      strict  – every legal rule is a hard constraint (default);
+      custom  – rules in `relax` become heavily-penalised soft constraints;
+      relaxed – every relaxable rule is soft (emergency mode: the schedule is
+                always produced if physically possible, and every deviation
+                from the regulations is reported).
+    Physical rules (nobody in two places at once, room capacity, curriculum
+    hours) are ALWAYS hard.
+    """
+    mode: str = "strict"
+    relax: set = field(default_factory=set)
+
+    def is_relaxed(self, rule: str) -> bool:
+        if self.mode == "relaxed":
+            return True
+        if self.mode == "custom":
+            return rule in self.relax
+        return False

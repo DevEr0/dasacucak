@@ -14,6 +14,56 @@ broken result.
 
 ---
 
+## New in this version
+
+### Subgroup splitting (ենթախմբեր)
+Mark a class as **split** (Classes → «կիսվող») and mark subjects as
+**splittable** (Subjects → «Կիսվող»; foreign languages, native language and
+informatics are splittable by default). Each splittable subject in a split
+class is taught twice — once per subgroup — and at any time slot **subgroup 1
+and subgroup 2 are always busy together** (paired), e.g. group 1 has English
+while group 2 has Russian, then they swap. The assigner automatically prefers a
+*different* teacher for the second subgroup, so the same subject can also run
+in both subgroups simultaneously when staffing allows. Each subgroup lesson
+needs its own room; the preflight check verifies the school has enough
+classrooms before solving.
+
+### High-school streams / electives (հոսքեր, grades 10–12)
+`elective_groups` (UI section «Հոսքեր») define cross-class student groups.
+Groups that share a **band (շերտ)** have disjoint students and therefore meet
+**simultaneously** — every student of the member classes attends exactly one
+group of the band. While a band meets, its member classes get no regular
+lessons, and the band counts toward the students' daily/weekly load. A group's
+subject is a **separate course**: stream algebra does not replace or displace
+the class's own algebra hours.
+
+### Law-compliance modes (emergency schedules)
+`compliance` (UI: Settings → Օրինականության ռեժիմ) controls what happens when
+a fully legal timetable is out of reach:
+
+- **strict** (default) — regulation-violating timetables are refused.
+- **relaxed** — *emergency mode* (a sick teacher, a closed wing…): every
+  regulatory rule becomes a heavily penalised soft constraint, so the solver
+  produces the **least-violating** timetable and reports every deviation with
+  its legal reference. The result is clearly marked as an emergency schedule.
+- **custom** — relax only the ticked rules (teacher weekly cap, teacher
+  availability, student daily/weekly caps, per-subject daily rules, subgroup
+  pairing, band synchronisation).
+
+Physical impossibilities — double-booked teachers/rooms/classes, missing
+special rooms, wrong lesson counts — are **never** relaxable in any mode.
+CLI: `--mode relaxed` or `--relax teacher_availability,student_daily_cap`.
+
+### Infeasibility explanation
+When no timetable exists, the solver re-runs with assumption literals and
+extracts a **minimal conflicting set of requirements** (an unsat core, then
+shrunk by deletion filtering), so the UI can show *why*: e.g. “class A's
+demand + teacher X's availability + teacher Y's availability are jointly
+impossible”. Each item comes with a concrete fix suggestion, and rules that
+may legally be relaxed link to the compliance settings.
+
+---
+
 ## Why these numbers (regulatory basis)
 
 The defaults follow current ՀՀ ԿԳՄՍ (Ministry of Education, Science, Culture and

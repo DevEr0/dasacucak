@@ -24,14 +24,14 @@ const I18N = {
     export: "Արտահանել", generate: "Կազմել դասացուցակը", solving: "Կազմվում է…",
     navSettings: "Կարգավորումներ", navSubjects: "Առարկաներ", navRooms: "Սենյակներ",
     navClasses: "Դասարաններ", navTeachers: "Ուսուցիչներ", navResult: "Դասացուցակ",
-    add: "Ավելացնել", remove: "Հեռացնել",
+    navElectives: "Հոսքեր", add: "Ավելացնել", remove: "Հեռացնել",
   },
   en: {
     tagline: "School timetable builder", loadSample: "Load sample", import: "Import",
     export: "Export", generate: "Generate timetable", solving: "Generating…",
     navSettings: "Settings", navSubjects: "Subjects", navRooms: "Rooms",
     navClasses: "Classes", navTeachers: "Teachers", navResult: "Timetable",
-    add: "Add", remove: "Remove",
+    navElectives: "Streams", add: "Add", remove: "Remove",
   },
 };
 
@@ -49,7 +49,8 @@ const state = {
 
 function blankSchool() {
   return { year: "", periods_per_day: 7, reserved_break_period: null,
-           subjects: {}, rooms: {}, classes: {}, teachers: {}, assignments: [] };
+           subjects: {}, rooms: {}, classes: {}, teachers: {}, assignments: [],
+           elective_groups: {}, compliance: { mode: "strict", relax: [] } };
 }
 function uid(prefix) { state._ids += 1; return `${prefix}${Date.now().toString(36).slice(-4)}${state._ids}`; }
 function t(k) { return (I18N[state.lang][k]) || k; }
@@ -100,7 +101,8 @@ function render() {
   document.querySelectorAll("#lang-toggle button").forEach(b => b.classList.toggle("on", b.dataset.lang === state.lang));
   const p = panel(); clear(p);
   ({ settings: secSettings, subjects: secSubjects, rooms: secRooms,
-     classes: secClasses, teachers: secTeachers, result: secResult }[state.section])();
+     classes: secClasses, electives: secElectives, teachers: secTeachers,
+     result: secResult }[state.section])();
   saveLocal();
 }
 
@@ -158,6 +160,7 @@ function secSettings() {
             on: { input: e => (state.maxSeconds = Math.max(3, +e.target.value || 20)) } }),
           state.lang === "hy" ? "Ավելի շատ ժամանակ = ավելի հարթ դասացուցակ" : "More time = a more polished timetable"),
       )),
+    complianceCard(),
     el("div", { class: "card" },
       el("span", { class: "eyebrow" }, state.lang === "hy" ? "Կանոնակարգային հիմք" : "Regulatory basis"),
       el("p", { class: "sub", style: "margin-top:8px" },
@@ -165,6 +168,56 @@ function secSettings() {
           ? "Ուսուցչի շաբաթական բեռնվածությունը՝ 18ժ (տարրական) / 20ժ, աշակերտի շաբաթական ծանրաբեռնվածությունը՝ ըստ դասարանի (մինչև 34 դաս/շաբաթ), 5-օրյա շաբաթ։ Բոլոր սահմանները կարգավորելի են։"
           : "Teacher load 18h (primary) / 20h, student weekly load graduated by grade (up to 34/week), 5-day week. All limits are configurable.")),
   );
+}
+const RELAXABLE_FALLBACK = {
+  student_daily_cap: { hy: "Աշակերտի օրական դասերի սահմանը", en: "Student daily lesson cap", law: "" },
+  student_weekly_cap: { hy: "Աշակերտի շաբաթական բեռի սահմանը", en: "Student weekly load cap", law: "" },
+  teacher_weekly_cap: { hy: "Ուսուցչի շաբաթական դրույքի սահմանը", en: "Teacher weekly load cap", law: "" },
+  teacher_availability: { hy: "Ուսուցչի հասանելիության ժամերը", en: "Teacher availability windows", law: "" },
+  subject_daily_rules: { hy: "Առարկայի օրական կանոնները", en: "Per-subject daily rules", law: "" },
+  band_sync: { hy: "Հոսքային խմբերի համաժամանակյա դասերը", en: "Stream groups meet simultaneously", law: "" },
+  split_pairing: { hy: "Ենթախմբերի զույգված դասերը", en: "Subgroup pairing", law: "" },
+};
+function relaxableRules() {
+  return (state.defaults && state.defaults.relaxable_rules) || RELAXABLE_FALLBACK;
+}
+function complianceCard() {
+  const comp = state.school.compliance || (state.school.compliance = { mode: "strict", relax: [] });
+  const hy = state.lang === "hy";
+  const modes = [
+    ["strict", hy ? "Խիստ — միայն օրինական դասացուցակ" : "Strict — legal timetables only"],
+    ["custom", hy ? "Ընտրովի — թուլացնել նշված կանոնները" : "Custom — relax the ticked rules"],
+    ["relaxed", hy ? "Արտակարգ — թույլատրել բոլոր շեղումները (հաշվետվությամբ)" : "Emergency — allow any deviation (reported)"],
+  ];
+  const modeSel = el("select", { on: { change: e => { comp.mode = e.target.value; render(); } } });
+  modes.forEach(([v, label]) => {
+    const o = el("option", { value: v }, label);
+    if (comp.mode === v) o.setAttribute("selected", "");
+    modeSel.append(o);
+  });
+  const kids = [
+    el("span", { class: "eyebrow" }, hy ? "Օրինականության ռեժիմ" : "Law-compliance mode"),
+    el("p", { class: "sub", style: "margin-top:8px" },
+      hy ? "Խիստ ռեժիմում կանոն խախտող դասացուցակ չի կազմվի։ Արտակարգ ռեժիմը (հիվանդ ուսուցիչ, վթարային իրավիճակ) կկազմի լավագույն հնարավոր դասացուցակը և կցուցադրի բոլոր շեղումները՝ օրենքի հղումներով։ Ֆիզիկապես անհնարինը (կրկնակի զբաղվածություն, սենյակների պակաս) երբեք չի թույլատրվում։"
+         : "Strict mode refuses to break any rule. Emergency mode (sick teacher, force-majeure) produces the best possible timetable and reports every deviation with its legal reference. Physical impossibilities (double-booking, missing rooms) are never allowed."),
+    el("div", { class: "field", style: "margin-top:10px" }, modeSel),
+  ];
+  if (comp.mode === "custom") {
+    const rules = relaxableRules();
+    const list = el("div", { class: "rulelist" });
+    Object.entries(rules).forEach(([rid, r]) => {
+      const on = comp.relax.includes(rid);
+      list.append(el("label", { class: "rulerow" },
+        checkbox(on, v => {
+          comp.relax = v ? [...new Set([...comp.relax, rid])] : comp.relax.filter(x => x !== rid);
+        }),
+        el("span", {},
+          el("span", { class: "rname" }, hy ? r.hy : r.en),
+          r.law ? el("span", { class: "rlaw" }, r.law) : null)));
+    });
+    kids.push(list);
+  }
+  return el("div", { class: "card" }, ...kids);
 }
 function field(label, control, hint) {
   return el("div", { class: "field" }, el("label", {}, label), control, hint ? el("div", { class: "hint" }, hint) : null);
@@ -190,6 +243,7 @@ function secSubjects() {
         on: { input: e => (s.difficulty = clampInt(e.target.value, 1, 5, 3)) } })),
       el("td", {}, rtSel),
       el("td", { class: "num" }, checkbox(!!s.is_pe, v => (s.is_pe = v))),
+      el("td", { class: "num" }, checkbox(isSplittable(sid, s), v => (s.splittable = v))),
       el("td", { class: "num" }, el("input", { type: "number", min: 1, max: 4, value: s.max_consecutive ?? 1, class: "cell",
         on: { input: e => (s.max_consecutive = clampInt(e.target.value, 1, 4, 1)) } })),
       el("td", { class: "num" }, el("input", { type: "number", min: 1, max: 4, value: s.max_per_day ?? 1, class: "cell",
@@ -198,24 +252,112 @@ function secSubjects() {
     );
   });
   const H = state.lang === "hy"
-    ? ["ID", "Անվանումը", "English", "Դժվ.", "Սենյակ", "Ֆիզկ.", "Իրար հետև", "Օրական"]
-    : ["ID", "Name", "English", "Diff.", "Room", "PE", "Consec.", "Per day"];
+    ? ["ID", "Անվանումը", "English", "Դժվ.", "Սենյակ", "Ֆիզկ.", "Կիսվող", "Իրար հետև", "Օրական"]
+    : ["ID", "Name", "English", "Diff.", "Room", "PE", "Split", "Consec.", "Per day"];
   panel().append(
     head(t("navSubjects"),
-      state.lang === "hy" ? "Դպրոցի առարկաները։ «Դժվ.» = դժվարություն 1–5 (4–5-ը դրվում են առավոտյան)։ «Սենյակ» = պարտադիր մասնագիտացված սենյակ։"
-                          : "School subjects. Diff. = difficulty 1–5 (4–5 get morning slots). Room = required specialised room."),
-    dataTable(H, rows, 9),
+      state.lang === "hy" ? "Դպրոցի առարկաները։ «Դժվ.» = դժվարություն 1–5 (4–5-ը դրվում են առավոտյան)։ «Սենյակ» = պարտադիր մասնագիտացված սենյակ։ «Կիսվող» = առարկան կիսվող դասարաններում դասավանդվում է երկու ենթախմբով։"
+                          : "School subjects. Diff. = difficulty 1–5 (4–5 get morning slots). Room = required specialised room. Split = taught in two subgroups in split classes."),
+    dataTable(H, rows, 10),
     el("div", { class: "addrow" }, el("button", { class: "btn subtle small", on: { click: addSubject } }, "+ " + t("add"))),
   );
 }
 function addSubject() {
   const id = uid("s");
-  state.school.subjects[id] = { name_hy: "", name_en: "", difficulty: 3, requires_room_type: null, is_pe: false, max_consecutive: 1, max_per_day: 1 };
+  state.school.subjects[id] = { name_hy: "", name_en: "", difficulty: 3, requires_room_type: null, is_pe: false, splittable: false, max_consecutive: 1, max_per_day: 1 };
   render();
+}
+function isSplittable(sid, s) {
+  if (s.splittable !== undefined && s.splittable !== null) return !!s.splittable;
+  const dflt = (state.defaults && state.defaults.split_default) || [];
+  return dflt.includes(sid);
 }
 function cleanupSubject(sid) {
   for (const [, c] of classEntries()) delete c.weekly_hours[sid];
   for (const [, tt] of teacherEntries()) tt.qualified_subjects = (tt.qualified_subjects || []).filter(x => x !== sid);
+}
+
+/* ---- Electives / streams (grades 10-12) ---- */
+function secElectives() {
+  const hy = state.lang === "hy";
+  const s = state.school;
+  s.elective_groups = s.elective_groups || {};
+  panel().append(head(t("navElectives"),
+    hy ? "Ավագ դպրոցի հոսքային/ընտրովի խմբեր՝ տարբեր դասարանների աշակերտներից։ Նույն «շերտի» խմբերը հավաքվում են միաժամանակ (աշակերտները բաժանվում են խմբերի միջև), իսկ խմբի դասի ժամին անդամ դասարանների սովորական դասերը չեն դրվում։ Խմբի առարկան առանձին դաս է՝ դասարանի նույն առարկայի ժամերից բացի։"
+       : "High-school streams / electives: groups drawing students from several classes. Groups in the same band meet simultaneously (each student attends one of them), and while a group meets, its member classes get no regular lessons. A group's subject is a separate course, on top of the classes' own hours in that subject."));
+
+  const gids = Object.keys(s.elective_groups);
+  if (!gids.length) {
+    panel().append(el("div", { class: "empty-note" },
+      hy ? "Դեռ հոսքեր չկան։ Սա պետք է միայն 10–12-րդ դասարաններ ունեցող դպրոցներին։"
+         : "No streams yet. Only needed for schools with grades 10–12."));
+  }
+  gids.forEach(gid => panel().append(electiveCard(gid)));
+  panel().append(el("div", { class: "addrow" },
+    el("button", { class: "btn subtle small", on: { click: () => {
+      const id = uid("g");
+      s.elective_groups[id] = { name: "", band: "hosq", member_classes: [], weekly_hours: {} };
+      render();
+    } } }, "+ " + t("add"))));
+}
+
+function electiveCard(gid) {
+  const hy = state.lang === "hy";
+  const s = state.school;
+  const g = s.elective_groups[gid];
+
+  const nameInp = el("input", { type: "text", value: g.name || "", style: "font-weight:700;min-width:240px",
+    placeholder: hy ? "Խմբի անունը (օր. Բնագիտամաթեմատիկական)" : "Group name (e.g. Sciences)",
+    on: { input: e => (g.name = e.target.value) } });
+  const bandInp = el("input", { type: "text", value: g.band || "", style: "width:110px",
+    title: hy ? "Շերտ. նույն շերտի խմբերը հավաքվում են միաժամանակ" : "Band: groups sharing a band meet simultaneously",
+    placeholder: "band", on: { input: e => (g.band = e.target.value) } });
+
+  // member-class chips
+  const chips = el("div", { class: "chips" });
+  classEntries().forEach(([cid, c]) => {
+    const on = g.member_classes.includes(cid);
+    chips.append(el("button", { class: "chip" + (on ? " on" : ""), type: "button",
+      title: hy ? `Դասարան ${cid} (${c.grade}-րդ)` : `Class ${cid} (grade ${c.grade})`,
+      on: { click: () => {
+        g.member_classes = on ? g.member_classes.filter(x => x !== cid)
+                              : [...g.member_classes, cid];
+        render();
+      } } }, cid));
+  });
+
+  // subject-hours mini table
+  const hoursHost = el("div", { class: "ghours" });
+  Object.entries(g.weekly_hours).forEach(([sid, h]) => {
+    const subj = s.subjects[sid];
+    hoursHost.append(el("div", { class: "ghrow" },
+      el("span", { class: "gsubj" }, subj ? (nm(subj) || sid) : sid),
+      el("input", { type: "number", min: 1, max: 8, value: h, class: "cell",
+        on: { input: e => {
+          const v = clampInt(e.target.value, 0, 8, 0);
+          if (v) g.weekly_hours[sid] = v; else delete g.weekly_hours[sid];
+        } } }),
+      rmBtn(() => { delete g.weekly_hours[sid]; render(); })));
+  });
+  const addSel = el("select", {});
+  addSel.append(el("option", { value: "" }, hy ? "+ առարկա…" : "+ subject…"));
+  subjectEntries().filter(([sid]) => !(sid in g.weekly_hours))
+    .forEach(([sid, subj]) => addSel.append(el("option", { value: sid }, nm(subj) || sid)));
+  addSel.addEventListener("change", e => {
+    if (e.target.value) { g.weekly_hours[e.target.value] = 2; render(); }
+  });
+  hoursHost.append(el("div", { class: "ghrow" }, addSel));
+
+  const total = Object.values(g.weekly_hours).reduce((a, b) => a + b, 0);
+  return el("div", { class: "card gcard" },
+    el("div", { class: "grow" },
+      el("span", { class: "id-pill" }, gid), nameInp,
+      el("label", { class: "bandlbl" }, hy ? "շերտ" : "band", bandInp),
+      el("span", { class: "spacer" }),
+      el("span", { class: "gtotal" }, (hy ? "շաբ. " : "wk ") + total + (hy ? " ժ" : " h")),
+      rmBtn(() => { delete s.elective_groups[gid]; render(); })),
+    el("div", { class: "glabel" }, hy ? "Մասնակից դասարաններ" : "Member classes"), chips,
+    el("div", { class: "glabel" }, hy ? "Խմբի առարկաներ և ժամեր" : "Group subjects & hours"), hoursHost);
 }
 
 /* ---- Rooms ---- */
@@ -292,7 +434,12 @@ function secClasses() {
       el("div", { class: "meta" },
         el("input", { type: "number", min: 1, max: 12, value: c.grade, title: state.lang === "hy" ? "Դասարան (թիվ)" : "Grade",
           on: { input: e => { c.grade = clampInt(e.target.value, 1, 12, c.grade); recalcRow(); } } }),
-        homeSel));
+        homeSel),
+      el("label", { class: "splitrow", title: state.lang === "hy"
+          ? "Կիսվող առարկաները (օտար լեզուներ, ինֆորմատիկա…) այս դասարանում դասավանդվում են երկու ենթախմբով"
+          : "Splittable subjects (foreign languages, IT…) are taught to this class in two subgroups" },
+        checkbox(!!c.split, v => (c.split = v)),
+        el("span", {}, state.lang === "hy" ? "կիսվող" : "split")));
 
     const tr = el("tr", {}, rowhead);
     function recalcRow() {
@@ -527,15 +674,31 @@ function clampInt(v, lo, hi, dflt) { const n = parseInt(v, 10); if (isNaN(n)) re
 /* ================= RESULT ================= */
 function secResult() {
   const r = state.result;
-  if (!r) { panel().append(el("div", { class: "empty-note" }, state.lang === "hy" ? "Դեռ կազմված դասացուցակ չկա։" : "No timetable yet.")); return; }
+  const hy = state.lang === "hy";
+  if (!r) { panel().append(el("div", { class: "empty-note" }, hy ? "Դեռ կազմված դասացուցակ չկա։" : "No timetable yet.")); return; }
 
-  const legal = r.violations.length === 0;
-  const banner = el("div", { class: "banner " + (legal ? "ok" : "bad") },
+  if (r.problem) { renderProblemPage(r.problem); return; }
+
+  const V = r.violations || { hard: [], legal: [] };
+  const hard = V.hard || [], legal = V.legal || [];
+  const kind = hard.length ? "bad" : (legal.length ? "warn" : "ok");
+  const titles = {
+    ok:  hy ? "Օրինական դասացուցակ — բոլոր կանոնները պահպանված են" : "Legal timetable — every rule satisfied",
+    warn: hy ? "Արտակարգ դասացուցակ — կան շեղումներ կանոնակարգից" : "Emergency timetable — deviations from the regulations",
+    bad: hy ? "Դասացուցակը խախտում է կանոնները" : "Timetable violates rules",
+  };
+  const vitems = hard.length ? hard.map(v => el("li", {}, v))
+    : legal.map(v => el("li", {},
+        v.message, v.law ? el("span", { class: "rlaw" }, " — " + v.law) : null));
+  const banner = el("div", { class: "banner " + kind },
     el("span", { class: "dot" }),
-    el("div", {}, el("div", {}, legal
-      ? (state.lang === "hy" ? "Օրինական դասացուցակ — բոլոր կանոնները պահպանված են" : "Legal timetable — every rule satisfied")
-      : (state.lang === "hy" ? "Դասացուցակը խախտում է կանոնները" : "Timetable violates rules")),
-      legal ? null : el("ul", { class: "vlist" }, ...r.violations.slice(0, 12).map(v => el("li", {}, v)))));
+    el("div", {}, el("div", {}, titles[kind]),
+      vitems.length ? el("ul", { class: "vlist" }, ...vitems.slice(0, 14)) : null,
+      (kind === "warn") ? el("div", { class: "bnote" },
+        hy ? "Թույլատրված է ընտրված ռեժիմով (Կարգավորումներ → Օրինականության ռեժիմ)։ Վերադարձեք «Խիստ» ռեժիմին, երբ իրավիճակը կարգավորվի։"
+           : "Permitted by the chosen compliance mode (Settings → Law-compliance). Switch back to Strict once the situation normalises.") : null,
+      (r.assign_warnings || []).length ? el("ul", { class: "vlist" },
+        ...(r.assign_warnings || []).map(w => el("li", {}, w.message))) : null));
 
   const stat = (k, v, good) => el("div", { class: "stat" + (good ? " good" : "") }, el("div", { class: "k" }, k), el("div", { class: "v" }, v));
   const stats = el("div", { class: "stats" },
@@ -551,7 +714,9 @@ function secResult() {
 
   const picker = el("select", { on: { change: e => { state.resultPick = e.target.value; renderGrid(); } } });
   const items = state.resultView === "classes"
-    ? classEntries().map(([cid]) => [cid, cid])
+    ? [...classEntries().map(([cid]) => [cid, cid]),
+       ...Object.entries(state.school.elective_groups || {})
+          .map(([gid, g]) => ["G:" + gid, "«" + (g.name || gid) + "»"])]
     : teacherEntries().filter(([tid]) => r.lessons.some(L => L.teacher_id === tid))
         .map(([tid, tt]) => [tid, tt.name || tid]).sort((a, b) => a[1].localeCompare(b[1], "hy"));
   if (!state.resultPick && items.length) state.resultPick = items[0][0];
@@ -572,14 +737,39 @@ function secResult() {
   renderGrid();
 }
 
+function lessonBelongsToClass(L, cid) {
+  if (L.kind === "elective") {
+    const g = (state.school.elective_groups || {})[L.group_id];
+    return !!(g && (g.member_classes || []).includes(cid));
+  }
+  return L.class_id === cid;
+}
+function lessonLabel(L, s) {
+  const subj = s.subjects[L.subject_id] || {};
+  let name = nm(subj) || L.subject_id;
+  if (L.kind === "split") name += state.lang === "hy" ? ` (խումբ ${L.subgroup})` : ` (group ${L.subgroup})`;
+  if (L.kind === "elective") {
+    const g = (s.elective_groups || {})[L.group_id];
+    name = "«" + ((g && g.name) || L.group_id) + "» " + name;
+  }
+  return name;
+}
 function renderGrid() {
   const host = $("#grid-host"); if (!host) return; clear(host);
   const r = state.result, s = state.school;
   const nDays = 5, lang = state.lang;
   const pick = state.resultPick;
-  const filt = state.resultView === "classes" ? (L => L.class_id === pick) : (L => L.teacher_id === pick);
-  const cell = {};  // (day,period) -> lesson
-  r.lessons.filter(filt).forEach(L => { cell[`${L.day}:${L.period}`] = L; });
+  const filt = state.resultView === "classes"
+    ? (pick && pick.startsWith("G:")
+        ? (L => L.group_id === pick.slice(2))
+        : (L => lessonBelongsToClass(L, pick)))
+    : (L => L.teacher_id === pick);
+  const cell = {};  // (day,period) -> [lessons]
+  r.lessons.filter(filt).forEach(L => {
+    const k = `${L.day}:${L.period}`;
+    (cell[k] = cell[k] || []).push(L);
+  });
+  Object.values(cell).forEach(ls => ls.sort((a, b) => (a.subgroup - b.subgroup) || (a.group_id > b.group_id ? 1 : -1)));
 
   const thead = el("tr", {}, el("th", {}, ""));
   for (let d = 0; d < nDays; d++) thead.append(el("th", {}, DAYS[lang][d]));
@@ -591,19 +781,26 @@ function renderGrid() {
       body.append(tr); continue;
     }
     for (let d = 0; d < nDays; d++) {
-      const L = cell[`${d}:${p}`];
-      if (!L) { tr.append(el("td", { class: "empty" }, "—")); continue; }
-      const subj = s.subjects[L.subject_id] || {};
-      const hard = (subj.difficulty || 3) >= (state.defaults ? state.defaults.hard_threshold : 4);
+      const ls = cell[`${d}:${p}`];
+      if (!ls || !ls.length) { tr.append(el("td", { class: "empty" }, "—")); continue; }
+      const hardTh = state.defaults ? state.defaults.hard_threshold : 4;
+      const hard = ls.some(L => ((s.subjects[L.subject_id] || {}).difficulty || 3) >= hardTh);
       const td = el("td", { class: "lesson" + (hard ? " hard" : "") });
-      if (state.resultView === "classes") {
-        td.append(el("span", { class: "s" }, nm(subj) || L.subject_id));
-        if (subj.requires_room_type) { const room = s.rooms[L.room_id]; td.append(el("span", { class: "r" }, room ? room.name : L.room_id)); }
-        const tch = s.teachers[L.teacher_id]; td.append(el("span", { class: "m" }, tch ? tch.name : L.teacher_id));
-      } else {
-        td.append(el("span", { class: "m", style: "font-weight:700;color:var(--ink)" }, L.class_id));
-        td.append(el("span", { class: "s", style: "font-weight:500" }, nm(subj) || L.subject_id));
-      }
+      ls.forEach((L, i) => {
+        if (i) td.append(el("div", { class: "pairline" }));
+        const subj = s.subjects[L.subject_id] || {};
+        if (state.resultView === "classes") {
+          td.append(el("span", { class: "s" }, lessonLabel(L, s)));
+          if (subj.requires_room_type) { const room = s.rooms[L.room_id]; td.append(el("span", { class: "r" }, room ? room.name : L.room_id)); }
+          const tch = s.teachers[L.teacher_id]; td.append(el("span", { class: "m" }, tch ? tch.name : L.teacher_id));
+        } else {
+          let who = L.class_id;
+          if (L.kind === "elective") { const g = (s.elective_groups || {})[L.group_id]; who = "«" + ((g && g.name) || L.group_id) + "»"; }
+          else if (L.kind === "split") who += "/" + L.subgroup;
+          td.append(el("span", { class: "m", style: "font-weight:700;color:var(--ink)" }, who));
+          td.append(el("span", { class: "s", style: "font-weight:500" }, nm(subj) || L.subject_id));
+        }
+      });
       tr.append(td);
     }
     body.append(tr);
@@ -636,9 +833,10 @@ async function solve() {
     if (!data.ok) { showOverlay(false); reportProblem(data); return; }
     state.result = data; state.resultView = "classes"; state.resultPick = null; state.section = "result";
     showOverlay(false); render();
-    toast(data.violations.length === 0
+    const nLegal = (data.violations && data.violations.legal || []).length;
+    toast(nLegal === 0
       ? (state.lang === "hy" ? "Դասացուցակը պատրաստ է" : "Timetable ready")
-      : (state.lang === "hy" ? "Կազմվեց, բայց կան խախտումներ" : "Generated, but with violations"), data.violations.length > 0);
+      : (state.lang === "hy" ? "Կազմվեց արտակարգ դասացուցակ (կան շեղումներ)" : "Emergency timetable generated (with deviations)"), nLegal > 0);
   } catch (e) { showOverlay(false); toast((state.lang === "hy" ? "Սխալ՝ " : "Error: ") + e.message, true); }
 }
 function quickCheck() {
@@ -652,14 +850,49 @@ function quickCheck() {
   return null;
 }
 function reportProblem(data) {
-  if (data.stage === "preflight" && data.problems) {
-    state.result = { status: "—", objective: 0, wall_time: 0, lessons: [], violations: data.problems, quality: { teacher_gaps: 0, afternoon_hard: 0, class_daily: {} } };
+  if ((data.stage === "preflight" && data.problems) || data.stage === "infeasible" || data.stage === "validation") {
+    state.result = { problem: data };
     state.section = "result"; render();
-    toast(state.lang === "hy" ? "Մուտքը կազմված չէ լուծելի դասացուցակի համար" : "Input can't yield a legal timetable", true);
+    toast(state.lang === "hy" ? "Դասացուցակ չկազմվեց — տես բացատրությունը" : "No timetable — see the explanation", true);
     return;
   }
   const msg = data.message || (state.lang === "hy" ? "Չհաջողվեց կազմել" : "Could not generate");
   toast(msg, true);
+}
+
+function renderProblemPage(p) {
+  const hy = state.lang === "hy";
+  const retry = el("button", { class: "btn primary small", on: { click: solve } }, "↻ " + t("generate"));
+  if (p.stage === "preflight" || p.stage === "validation") {
+    panel().append(
+      head(hy ? "Ինչու՞ դասացուցակ չկազմվեց" : "Why no timetable was produced",
+        hy ? "Մուտքային տվյալները արդեն իսկ անհամատեղելի են՝ նախնական ստուգումը գտավ հետևյալ խնդիրները։"
+           : "The input data is already inconsistent — the preflight check found these problems.", retry),
+      el("div", { class: "banner bad" }, el("span", { class: "dot" }),
+        el("div", {}, el("ul", { class: "vlist" }, ...(p.problems || []).map(x => el("li", {}, x))))));
+    return;
+  }
+  // infeasible: minimal conflicting rule set
+  const diag = p.diagnosis || [];
+  const cards = diag.map(d => {
+    const rules = relaxableRules();
+    const relaxable = d.rule in rules;
+    const hint =
+      d.rule === "demand" ? (hy ? "Նվազեցրեք շաբաթական ժամերը կամ ավելացրեք դասաժամ օրում։" : "Reduce weekly hours or add a period to the day.")
+      : d.rule === "classroom_count" ? (hy ? "Ավելացրեք սովորական սենյակներ, կամ անջատեք դասարանի կիսումը։" : "Add ordinary classrooms, or turn off class splitting.")
+      : d.rule === "room_capacity" ? (hy ? "Ավելացրեք այդ տեսակի սենյակ։" : "Add another room of that type.")
+      : d.rule === "teacher_availability" ? (hy ? "Ընդլայնեք ուսուցչի հասանելի ժամերը, ավելացրեք ուսուցիչ, կամ թուլացրեք կանոնը Կարգավորումներում։" : "Widen this teacher's availability, add a teacher, or relax the rule in Settings.")
+      : relaxable ? (hy ? "Կարող եք թուլացնել այս կանոնը Կարգավորումներ → Օրինականության ռեժիմ բաժնում։" : "You can relax this rule under Settings → Law-compliance.")
+      : (hy ? "Փոխեք համապատասխան մուտքային տվյալները։" : "Adjust the corresponding input data.");
+    return el("div", { class: "card diagcard" },
+      el("div", { class: "dmsg" }, d.message),
+      el("div", { class: "dhint" }, hint));
+  });
+  panel().append(
+    head(hy ? "Ինչու՞ դասացուցակ չկազմվեց" : "Why no timetable exists",
+      hy ? "Հետևյալ պահանջները միասին անհամատեղելի են. դրանցից գոնե մեկը պետք է փոխվի։ Ցանկը նվազագույն է՝ յուրաքանչյուր կետը իրապես մասնակցում է կոնֆլիկտին։"
+         : "The following requirements are jointly impossible — at least one of them must change. The list is minimal: every item genuinely takes part in the conflict.", retry),
+    ...(cards.length ? cards : [el("div", { class: "empty-note" }, p.message || "…")]));
 }
 
 function showOverlay(on) { $("#overlay").hidden = !on; }
@@ -699,7 +932,16 @@ function normalize(raw) {
   s.subjects = raw.subjects || {}; s.rooms = raw.rooms || {};
   s.classes = raw.classes || {}; s.teachers = raw.teachers || {};
   s.assignments = raw.assignments || [];
+  s.elective_groups = raw.elective_groups || {};
+  const comp = raw.compliance || {};
+  s.compliance = { mode: comp.mode || "strict", relax: comp.relax || [] };
   for (const [, c] of Object.entries(s.classes)) c.weekly_hours = c.weekly_hours || {};
+  for (const [, g] of Object.entries(s.elective_groups)) {
+    g.member_classes = g.member_classes || [];
+    g.weekly_hours = g.weekly_hours || {};
+    g.band = g.band || "";
+    g.name = g.name || "";
+  }
   return s;
 }
 function exportSchool() {
@@ -708,6 +950,8 @@ function exportSchool() {
     reserved_break_period: state.school.reserved_break_period,
     subjects: state.school.subjects, rooms: state.school.rooms,
     classes: state.school.classes, teachers: state.school.teachers, assignments: state.school.assignments || [],
+    elective_groups: state.school.elective_groups || {},
+    compliance: state.school.compliance || { mode: "strict", relax: [] },
   };
   saveBlob(JSON.stringify(out, null, 2), (state.school.year || "school") + ".json", "application/json");
 }

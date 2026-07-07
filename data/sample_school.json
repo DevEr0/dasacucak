@@ -3,92 +3,514 @@
     "year": "2024-2025",
     "periods_per_day": 7,
     "reserved_break_period": null,
-    "days_hy": ["Երկուշաբթի", "Երեքշաբթի", "Չորեքշաբթի", "Հինգշաբթի", "Ուրբաթ"],
-    "days_en": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    "days_hy": [
+      "Երկուշաբթի",
+      "Երեքշաբթի",
+      "Չորեքշաբթի",
+      "Հինգշաբթի",
+      "Ուրբաթ"
+    ],
+    "days_en": [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday"
+    ]
   },
-
   "subjects": {
-    "hayoc_lezu":   {"name_hy": "Հայոց լեզու", "name_en": "Armenian Language", "difficulty": 4},
-    "grakanutyun":  {"name_hy": "Գրականություն", "name_en": "Literature", "difficulty": 3},
-    "hanrahashiv":  {"name_hy": "Հանրահաշիվ", "name_en": "Algebra", "difficulty": 5},
-    "erkrachaputyun": {"name_hy": "Երկրաչափություն", "name_en": "Geometry", "difficulty": 5},
-    "rusac_lezu":   {"name_hy": "Ռուսաց լեզու", "name_en": "Russian", "difficulty": 4},
-    "anglerent":    {"name_hy": "Անգլերեն", "name_en": "English", "difficulty": 4},
-    "fizika":       {"name_hy": "Ֆիզիկա", "name_en": "Physics", "difficulty": 5, "requires_room_type": "lab_physics"},
-    "kimia":        {"name_hy": "Քիմիա", "name_en": "Chemistry", "difficulty": 5, "requires_room_type": "lab_chemistry"},
-    "kensabanutyun":{"name_hy": "Կենսաբանություն", "name_en": "Biology", "difficulty": 3, "requires_room_type": "lab_biology"},
-    "ashxarhagrutyun": {"name_hy": "Աշխարհագրություն", "name_en": "Geography", "difficulty": 3},
-    "hayoc_patmutyun": {"name_hy": "Հայոց պատմություն", "name_en": "Armenian History", "difficulty": 3},
-    "hamashxarhayin_patmutyun": {"name_hy": "Համաշխարհային պատմություն", "name_en": "World History", "difficulty": 3},
-    "hasarakagitutyun": {"name_hy": "Հասարակագիտություն", "name_en": "Social Studies", "difficulty": 3},
-    "informatika":  {"name_hy": "Ինֆորմատիկա", "name_en": "ICT", "difficulty": 3, "requires_room_type": "computer"},
-    "kerparvest":   {"name_hy": "Կերպարվեստ", "name_en": "Art", "difficulty": 2},
-    "erazhshtutyun":{"name_hy": "Երաժշտություն", "name_en": "Music", "difficulty": 2},
-    "texnologia":   {"name_hy": "Տեխնոլոգիա", "name_en": "Technology", "difficulty": 2},
-    "fizkultura":   {"name_hy": "Ֆիզկուլտուրա", "name_en": "Physical Education", "difficulty": 1, "is_pe": true, "requires_room_type": "gym"},
-    "neraqakan":    {"name_hy": "Ներառական աջակցություն", "name_en": "Inclusive Support", "difficulty": 2, "requires_room_type": "resource"}
+    "hayoc_lezu": {
+      "name_hy": "Հայոց լեզու",
+      "name_en": "Armenian Language",
+      "difficulty": 4,
+      "splittable": false
+    },
+    "grakanutyun": {
+      "name_hy": "Գրականություն",
+      "name_en": "Literature",
+      "difficulty": 3,
+      "splittable": false
+    },
+    "hanrahashiv": {
+      "name_hy": "Հանրահաշիվ",
+      "name_en": "Algebra",
+      "difficulty": 5
+    },
+    "erkrachaputyun": {
+      "name_hy": "Երկրաչափություն",
+      "name_en": "Geometry",
+      "difficulty": 5
+    },
+    "rusac_lezu": {
+      "name_hy": "Ռուսաց լեզու",
+      "name_en": "Russian",
+      "difficulty": 4,
+      "splittable": true
+    },
+    "anglerent": {
+      "name_hy": "Անգլերեն",
+      "name_en": "English",
+      "difficulty": 4,
+      "splittable": true
+    },
+    "fizika": {
+      "name_hy": "Ֆիզիկա",
+      "name_en": "Physics",
+      "difficulty": 5,
+      "requires_room_type": "lab_physics"
+    },
+    "kimia": {
+      "name_hy": "Քիմիա",
+      "name_en": "Chemistry",
+      "difficulty": 5,
+      "requires_room_type": "lab_chemistry"
+    },
+    "kensabanutyun": {
+      "name_hy": "Կենսաբանություն",
+      "name_en": "Biology",
+      "difficulty": 3,
+      "requires_room_type": "lab_biology"
+    },
+    "ashxarhagrutyun": {
+      "name_hy": "Աշխարհագրություն",
+      "name_en": "Geography",
+      "difficulty": 3
+    },
+    "hayoc_patmutyun": {
+      "name_hy": "Հայոց պատմություն",
+      "name_en": "Armenian History",
+      "difficulty": 3
+    },
+    "hamashxarhayin_patmutyun": {
+      "name_hy": "Համաշխարհային պատմություն",
+      "name_en": "World History",
+      "difficulty": 3
+    },
+    "hasarakagitutyun": {
+      "name_hy": "Հասարակագիտություն",
+      "name_en": "Social Studies",
+      "difficulty": 3
+    },
+    "informatika": {
+      "name_hy": "Ինֆորմատիկա",
+      "name_en": "ICT",
+      "difficulty": 3,
+      "requires_room_type": "computer",
+      "splittable": true
+    },
+    "kerparvest": {
+      "name_hy": "Կերպարվեստ",
+      "name_en": "Art",
+      "difficulty": 2
+    },
+    "erazhshtutyun": {
+      "name_hy": "Երաժշտություն",
+      "name_en": "Music",
+      "difficulty": 2
+    },
+    "texnologia": {
+      "name_hy": "Տեխնոլոգիա",
+      "name_en": "Technology",
+      "difficulty": 2
+    },
+    "fizkultura": {
+      "name_hy": "Ֆիզկուլտուրա",
+      "name_en": "Physical Education",
+      "difficulty": 1,
+      "is_pe": true,
+      "requires_room_type": "gym"
+    },
+    "neraqakan": {
+      "name_hy": "Ներառական աջակցություն",
+      "name_en": "Inclusive Support",
+      "difficulty": 2,
+      "requires_room_type": "resource"
+    },
+    "nzp": {
+      "name_hy": "ՆԶՊ",
+      "name_en": "Military Prep.",
+      "difficulty": 2
+    }
   },
-
   "rooms": {
-    "c7a":      {"name": "Կաբ. 201", "type": "classroom"},
-    "c7b":      {"name": "Կաբ. 202", "type": "classroom"},
-    "c8a":      {"name": "Կաբ. 203", "type": "classroom"},
-    "c8b":      {"name": "Կաբ. 204", "type": "classroom"},
-    "lab_phys": {"name": "Ֆիզիկայի լաբ.", "type": "lab_physics"},
-    "lab_chem": {"name": "Քիմիայի լաբ.", "type": "lab_chemistry"},
-    "lab_bio":  {"name": "Կենսաբ. լաբ.", "type": "lab_biology"},
-    "comp":     {"name": "Համակարգչային սենյակ", "type": "computer"},
-    "gym":      {"name": "Մարզադահլիճ", "type": "gym"},
-    "resource": {"name": "Ռեսուրս սենյակ", "type": "resource"}
+    "c7a": {
+      "name": "Կաբ. 201",
+      "type": "classroom"
+    },
+    "c7b": {
+      "name": "Կաբ. 202",
+      "type": "classroom"
+    },
+    "c8a": {
+      "name": "Կաբ. 203",
+      "type": "classroom"
+    },
+    "c8b": {
+      "name": "Կաբ. 204",
+      "type": "classroom"
+    },
+    "lab_phys": {
+      "name": "Ֆիզիկայի լաբ.",
+      "type": "lab_physics"
+    },
+    "lab_chem": {
+      "name": "Քիմիայի լաբ.",
+      "type": "lab_chemistry"
+    },
+    "lab_bio": {
+      "name": "Կենսաբ. լաբ.",
+      "type": "lab_biology"
+    },
+    "comp": {
+      "name": "Համակարգչային սենյակ",
+      "type": "computer"
+    },
+    "gym": {
+      "name": "Մարզադահլիճ",
+      "type": "gym"
+    },
+    "resource": {
+      "name": "Ռեսուրս սենյակ",
+      "type": "resource"
+    },
+    "c10a": {
+      "name": "Կաբ. 205",
+      "type": "classroom"
+    },
+    "c10b": {
+      "name": "Կաբ. 206",
+      "type": "classroom"
+    },
+    "cextra": {
+      "name": "Կաբ. 207",
+      "type": "classroom"
+    }
   },
-
   "classes": {
-    "7Ա": {"grade": 7, "home_room": "c7a", "weekly_hours": {
-      "hayoc_lezu": 3, "grakanutyun": 2, "hanrahashiv": 3, "erkrachaputyun": 2,
-      "rusac_lezu": 2, "anglerent": 2, "fizika": 2, "kensabanutyun": 2,
-      "ashxarhagrutyun": 2, "hayoc_patmutyun": 2, "hamashxarhayin_patmutyun": 1,
-      "informatika": 1, "kerparvest": 1, "erazhshtutyun": 1, "texnologia": 1,
-      "fizkultura": 2}},
-
-    "7Բ": {"grade": 7, "home_room": "c7b", "weekly_hours": {
-      "hayoc_lezu": 3, "grakanutyun": 2, "hanrahashiv": 3, "erkrachaputyun": 2,
-      "rusac_lezu": 2, "anglerent": 2, "fizika": 2, "kensabanutyun": 2,
-      "ashxarhagrutyun": 2, "hayoc_patmutyun": 2, "hamashxarhayin_patmutyun": 1,
-      "informatika": 1, "kerparvest": 1, "erazhshtutyun": 1, "texnologia": 1,
-      "fizkultura": 2, "neraqakan": 1}},
-
-    "8Ա": {"grade": 8, "home_room": "c8a", "weekly_hours": {
-      "hayoc_lezu": 3, "grakanutyun": 2, "hanrahashiv": 3, "erkrachaputyun": 2,
-      "rusac_lezu": 2, "anglerent": 3, "fizika": 2, "kimia": 2, "kensabanutyun": 2,
-      "ashxarhagrutyun": 2, "hayoc_patmutyun": 2, "hamashxarhayin_patmutyun": 1,
-      "hasarakagitutyun": 1, "informatika": 1, "erazhshtutyun": 1, "texnologia": 1,
-      "fizkultura": 2}},
-
-    "8Բ": {"grade": 8, "home_room": "c8b", "weekly_hours": {
-      "hayoc_lezu": 3, "grakanutyun": 2, "hanrahashiv": 3, "erkrachaputyun": 2,
-      "rusac_lezu": 2, "anglerent": 3, "fizika": 2, "kimia": 2, "kensabanutyun": 2,
-      "ashxarhagrutyun": 2, "hayoc_patmutyun": 2, "hamashxarhayin_patmutyun": 1,
-      "hasarakagitutyun": 1, "informatika": 1, "erazhshtutyun": 1, "texnologia": 1,
-      "fizkultura": 2}}
+    "7Ա": {
+      "grade": 7,
+      "home_room": "c7a",
+      "weekly_hours": {
+        "hayoc_lezu": 3,
+        "grakanutyun": 2,
+        "hanrahashiv": 3,
+        "erkrachaputyun": 2,
+        "rusac_lezu": 2,
+        "anglerent": 2,
+        "fizika": 2,
+        "kensabanutyun": 2,
+        "ashxarhagrutyun": 2,
+        "hayoc_patmutyun": 2,
+        "hamashxarhayin_patmutyun": 1,
+        "informatika": 1,
+        "kerparvest": 1,
+        "erazhshtutyun": 1,
+        "texnologia": 1,
+        "fizkultura": 2
+      },
+      "split": true
+    },
+    "7Բ": {
+      "grade": 7,
+      "home_room": "c7b",
+      "weekly_hours": {
+        "hayoc_lezu": 3,
+        "grakanutyun": 2,
+        "hanrahashiv": 3,
+        "erkrachaputyun": 2,
+        "rusac_lezu": 2,
+        "anglerent": 2,
+        "fizika": 2,
+        "kensabanutyun": 2,
+        "ashxarhagrutyun": 2,
+        "hayoc_patmutyun": 2,
+        "hamashxarhayin_patmutyun": 1,
+        "informatika": 1,
+        "kerparvest": 1,
+        "erazhshtutyun": 1,
+        "texnologia": 1,
+        "fizkultura": 2,
+        "neraqakan": 1
+      }
+    },
+    "8Ա": {
+      "grade": 8,
+      "home_room": "c8a",
+      "weekly_hours": {
+        "hayoc_lezu": 3,
+        "grakanutyun": 2,
+        "hanrahashiv": 3,
+        "erkrachaputyun": 2,
+        "rusac_lezu": 2,
+        "anglerent": 3,
+        "fizika": 2,
+        "kimia": 2,
+        "kensabanutyun": 2,
+        "ashxarhagrutyun": 2,
+        "hayoc_patmutyun": 2,
+        "hamashxarhayin_patmutyun": 1,
+        "hasarakagitutyun": 1,
+        "informatika": 1,
+        "erazhshtutyun": 1,
+        "texnologia": 1,
+        "fizkultura": 2
+      }
+    },
+    "8Բ": {
+      "grade": 8,
+      "home_room": "c8b",
+      "weekly_hours": {
+        "hayoc_lezu": 3,
+        "grakanutyun": 2,
+        "hanrahashiv": 3,
+        "erkrachaputyun": 2,
+        "rusac_lezu": 2,
+        "anglerent": 3,
+        "fizika": 2,
+        "kimia": 2,
+        "kensabanutyun": 2,
+        "ashxarhagrutyun": 2,
+        "hayoc_patmutyun": 2,
+        "hamashxarhayin_patmutyun": 1,
+        "hasarakagitutyun": 1,
+        "informatika": 1,
+        "erazhshtutyun": 1,
+        "texnologia": 1,
+        "fizkultura": 2
+      }
+    },
+    "10Ա": {
+      "grade": 10,
+      "home_room": "c10a",
+      "weekly_hours": {
+        "hayoc_lezu": 2,
+        "grakanutyun": 2,
+        "hanrahashiv": 2,
+        "erkrachaputyun": 2,
+        "rusac_lezu": 2,
+        "anglerent": 2,
+        "fizika": 2,
+        "kimia": 2,
+        "kensabanutyun": 2,
+        "ashxarhagrutyun": 1,
+        "hayoc_patmutyun": 2,
+        "hamashxarhayin_patmutyun": 1,
+        "hasarakagitutyun": 1,
+        "informatika": 1,
+        "nzp": 1,
+        "fizkultura": 2
+      }
+    },
+    "10Բ": {
+      "grade": 10,
+      "home_room": "c10b",
+      "weekly_hours": {
+        "hayoc_lezu": 2,
+        "grakanutyun": 2,
+        "hanrahashiv": 2,
+        "erkrachaputyun": 2,
+        "rusac_lezu": 2,
+        "anglerent": 2,
+        "fizika": 2,
+        "kimia": 2,
+        "kensabanutyun": 2,
+        "ashxarhagrutyun": 1,
+        "hayoc_patmutyun": 2,
+        "hamashxarhayin_patmutyun": 1,
+        "hasarakagitutyun": 1,
+        "informatika": 1,
+        "nzp": 1,
+        "fizkultura": 2
+      }
+    }
   },
-
   "teachers": {
-    "arm1":  {"name": "Անահիտ Գրիգորյան", "qualified_subjects": ["hayoc_lezu", "grakanutyun"]},
-    "arm2":  {"name": "Մարինե Հակոբյան", "qualified_subjects": ["hayoc_lezu", "grakanutyun"]},
-    "math1": {"name": "Արմեն Սարգսյան", "qualified_subjects": ["hanrahashiv", "erkrachaputyun"]},
-    "math2": {"name": "Գայանե Պետրոսյան", "qualified_subjects": ["hanrahashiv", "erkrachaputyun"]},
-    "rus1":  {"name": "Լուսինե Կարապետյան", "qualified_subjects": ["rusac_lezu"]},
-    "eng1":  {"name": "Նարե Մկրտչյան", "qualified_subjects": ["anglerent"]},
-    "phys1": {"name": "Վահան Ավագյան", "qualified_subjects": ["fizika"]},
-    "chembio1": {"name": "Սյուզաննա Մարտիրոսյան", "qualified_subjects": ["kimia", "kensabanutyun"]},
-    "geo1":  {"name": "Արտակ Հովհաննիսյան", "qualified_subjects": ["ashxarhagrutyun"]},
-    "hist1": {"name": "Կարեն Աբրահամյան", "qualified_subjects": ["hayoc_patmutyun", "hamashxarhayin_patmutyun"]},
-    "ict1":  {"name": "Դավիթ Ստեփանյան", "qualified_subjects": ["informatika"]},
-    "arts1": {"name": "Ռուզաննա Գասպարյան", "qualified_subjects": ["kerparvest", "erazhshtutyun", "texnologia"], "available_days": [0, 1, 2, 3]},
-    "pe1":   {"name": "Հայկ Մանուկյան", "qualified_subjects": ["fizkultura"]},
-    "sped1": {"name": "Զարուհի Վարդանյան", "qualified_subjects": ["neraqakan"]},
-    "admin1": {"name": "Սամվել Ղազարյան (փոխտնօրեն)", "qualified_subjects": ["hasarakagitutyun"], "role": "admin", "max_weekly_load": 12, "available_periods": [1, 2, 3, 4, 5]}
+    "arm1": {
+      "name": "Անահիտ Գրիգորյան",
+      "qualified_subjects": [
+        "hayoc_lezu",
+        "grakanutyun"
+      ]
+    },
+    "arm2": {
+      "name": "Մարինե Հակոբյան",
+      "qualified_subjects": [
+        "hayoc_lezu",
+        "grakanutyun"
+      ]
+    },
+    "math1": {
+      "name": "Արմեն Սարգսյան",
+      "qualified_subjects": [
+        "hanrahashiv",
+        "erkrachaputyun"
+      ]
+    },
+    "math2": {
+      "name": "Գայանե Պետրոսյան",
+      "qualified_subjects": [
+        "hanrahashiv",
+        "erkrachaputyun"
+      ]
+    },
+    "rus1": {
+      "name": "Լուսինե Կարապետյան",
+      "qualified_subjects": [
+        "rusac_lezu"
+      ]
+    },
+    "eng1": {
+      "name": "Նարե Մկրտչյան",
+      "qualified_subjects": [
+        "anglerent"
+      ]
+    },
+    "phys1": {
+      "name": "Վահան Ավագյան",
+      "qualified_subjects": [
+        "fizika"
+      ]
+    },
+    "chembio1": {
+      "name": "Սյուզաննա Մարտիրոսյան",
+      "qualified_subjects": [
+        "kimia",
+        "kensabanutyun"
+      ]
+    },
+    "geo1": {
+      "name": "Արտակ Հովհաննիսյան",
+      "qualified_subjects": [
+        "ashxarhagrutyun",
+        "nzp"
+      ]
+    },
+    "hist1": {
+      "name": "Կարեն Աբրահամյան",
+      "qualified_subjects": [
+        "hayoc_patmutyun",
+        "hamashxarhayin_patmutyun"
+      ]
+    },
+    "ict1": {
+      "name": "Դավիթ Ստեփանյան",
+      "qualified_subjects": [
+        "informatika"
+      ]
+    },
+    "arts1": {
+      "name": "Ռուզաննա Գասպարյան",
+      "qualified_subjects": [
+        "kerparvest",
+        "erazhshtutyun",
+        "texnologia"
+      ],
+      "available_days": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    "pe1": {
+      "name": "Հայկ Մանուկյան",
+      "qualified_subjects": [
+        "fizkultura"
+      ]
+    },
+    "sped1": {
+      "name": "Զարուհի Վարդանյան",
+      "qualified_subjects": [
+        "neraqakan"
+      ]
+    },
+    "admin1": {
+      "name": "Սամվել Ղազարյան (փոխտնօրեն)",
+      "qualified_subjects": [
+        "hasarakagitutyun"
+      ],
+      "role": "admin",
+      "max_weekly_load": 12,
+      "available_periods": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    "eng2": {
+      "name": "Սոնա Ասատրյան",
+      "qualified_subjects": [
+        "anglerent"
+      ]
+    },
+    "rus2": {
+      "name": "Աննա Մելքոնյան",
+      "qualified_subjects": [
+        "rusac_lezu"
+      ]
+    },
+    "math3": {
+      "name": "Տիգրան Բաղդասարյան",
+      "qualified_subjects": [
+        "hanrahashiv",
+        "erkrachaputyun",
+        "fizika"
+      ]
+    },
+    "arm3": {
+      "name": "Հասմիկ Ավետիսյան",
+      "qualified_subjects": [
+        "hayoc_lezu",
+        "grakanutyun"
+      ]
+    },
+    "hist2": {
+      "name": "Վարդան Ոսկանյան",
+      "qualified_subjects": [
+        "hayoc_patmutyun",
+        "hamashxarhayin_patmutyun",
+        "hasarakagitutyun",
+        "nzp"
+      ]
+    },
+    "ict2": {
+      "name": "Լիլիթ Սահակյան",
+      "qualified_subjects": [
+        "informatika"
+      ]
+    }
   },
-
-  "assignments": []
+  "assignments": [],
+  "elective_groups": {
+    "g10_sci": {
+      "name": "Բնագիտամաթեմատիկական հոսք",
+      "band": "hosq10",
+      "member_classes": [
+        "10Ա",
+        "10Բ"
+      ],
+      "weekly_hours": {
+        "hanrahashiv": 2,
+        "fizika": 2
+      }
+    },
+    "g10_hum": {
+      "name": "Հումանիտար հոսք",
+      "band": "hosq10",
+      "member_classes": [
+        "10Ա",
+        "10Բ"
+      ],
+      "weekly_hours": {
+        "hayoc_lezu": 2,
+        "hayoc_patmutyun": 2
+      }
+    }
+  },
+  "compliance": {
+    "mode": "strict",
+    "relax": []
+  }
 }

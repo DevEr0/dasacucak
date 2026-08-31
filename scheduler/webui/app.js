@@ -82,6 +82,7 @@ const subjectEntries = () => Object.entries(state.school.subjects);
 const roomEntries = () => Object.entries(state.school.rooms);
 const classEntries = () => Object.entries(state.school.classes);
 const teacherEntries = () => Object.entries(state.school.teachers);
+const electiveEntries = () => Object.entries(state.school.elective_groups || {});
 function definedRoomTypes() {
   const s = new Set(roomEntries().map(([, r]) => r.type).filter(Boolean));
   return Array.from(s);
@@ -279,15 +280,24 @@ function cleanupSubject(sid) {
     if (tt.qualified_classes_by_subject) delete tt.qualified_classes_by_subject[sid];
   }
 }
-function cleanupClass(cid) {
+/* Remove a scope id (a class OR an elective/stream group) from every
+   teacher's per-subject allowed lists, so deleting it doesn't leave a
+   dangling reference. */
+function cleanupScope(scopeId) {
   for (const [, tt] of teacherEntries()) {
     const map = tt.qualified_classes_by_subject || {};
     for (const sid of Object.keys(map)) {
-      map[sid] = map[sid].filter(x => x !== cid);
+      map[sid] = map[sid].filter(x => x !== scopeId);
       if (!map[sid].length) delete map[sid];
     }
   }
+}
+function cleanupClass(cid) {
+  cleanupScope(cid);
   for (const [, g] of Object.entries(state.school.elective_groups || {})) g.member_classes = (g.member_classes || []).filter(x => x !== cid);
+}
+function cleanupElectiveGroup(gid) {
+  cleanupScope(gid);
 }
 
 /* ---- Electives / streams (grades 10-12) ---- */
@@ -368,7 +378,7 @@ function electiveCard(gid) {
       el("label", { class: "bandlbl" }, hy ? "շերտ" : "band", bandInp),
       el("span", { class: "spacer" }),
       el("span", { class: "gtotal" }, (hy ? "շաբ. " : "wk ") + total + (hy ? " ժ" : " h")),
-      rmBtn(() => { delete s.elective_groups[gid]; render(); })),
+      rmBtn(() => { delete s.elective_groups[gid]; cleanupElectiveGroup(gid); render(); })),
     el("div", { class: "glabel" }, hy ? "Մասնակից դասարաններ" : "Member classes"), chips,
     el("div", { class: "glabel" }, hy ? "Խմբի առարկաներ և ժամեր" : "Group subjects & hours"), hoursHost);
 }
@@ -567,8 +577,8 @@ function secTeachers() {
     dataTable(H, rows, 6),
     el("p", { class: "sub", style: "margin-top:8px" },
       state.lang === "hy"
-        ? "Յուրաքանչյուր առարկայի կողքին ընտրեք, թե որ դասարաններին կարող է այն դասավանդել այս ուսուցիչը (օր. 5–7-րդ դասարաններին՝ մաթեմատիկա, 9–11-րդին՝ ֆիզիկա)։ Դատարկ = այդ առարկան կարող է դասավանդել ցանկացած դասարանում։"
-        : "Next to each subject, choose which classes this teacher may teach it to (e.g. classes 5–7 for math, 9–11 for physics). Empty = that subject may be taught to any class."),
+        ? "Յուրաքանչյուր առարկայի կողքին ընտրեք, թե որ դասարաններին կամ հոսքերին կարող է այն դասավանդել այս ուսուցիչը (օր. 5–7-րդ դասարաններին՝ մաթեմատիկա, կոնկրետ հոսքի՝ ֆիզիկա)։ Դատարկ = այդ առարկան կարող է դասավանդել ցանկացած դասարանում/հոսքում։"
+        : "Next to each subject, choose which classes or streams this teacher may teach it to (e.g. classes 5–7 for math, a specific stream for physics). Empty = that subject may be taught to any class or stream."),
     el("p", { class: "sub", style: "margin-top:4px" },
       state.lang === "hy"
         ? "Հասանելիություն․ սեղմեք օրվա պիտակին՝ ամբողջ օրն անջատելու/միացնելու համար, կամ առանձին ժամերի վրա։ Լրացված = հասանելի (լռելյայն՝ բոլոր ժամերը)։"
@@ -577,15 +587,24 @@ function secTeachers() {
   );
 }
 
-/* Build the "subject -> allowed classes" qualification editor for one teacher.
-   Each qualified subject gets its own row with its own class-chip picker, so
-   the same teacher can be scoped to different classes per subject
-   (e.g. classes 5-7 for math, but only 9-11 for physics). */
+/* Build the "subject -> allowed classes/streams" qualification editor for one
+   teacher. Each qualified subject gets its own row with its own scope-chip
+   picker (regular classes AND elective/stream groups are both selectable),
+   so the same teacher can be scoped differently per subject
+   (e.g. classes 5-7 for math, but only a specific stream for physics). */
 function qualificationEditor(tch) {
   const hy = state.lang === "hy";
   const subs = subjectEntries();
   const clss = classEntries();
+  const elgs = electiveEntries();
   const box = el("div", { class: "qualbox" });
+
+  const scopeLabel = id => {
+    if (state.school.classes[id]) return id;
+    const g = (state.school.elective_groups || {})[id];
+    if (g) return (g.name || id) + (hy ? " (հոսք)" : " (stream)");
+    return id;
+  };
 
   tch.qualified_subjects.forEach(sid => {
     const subj = state.school.subjects[sid];
@@ -593,7 +612,8 @@ function qualificationEditor(tch) {
 
     const classChips = el("div", { class: "chips" });
     allowed.forEach(cid => {
-      classChips.append(el("span", { class: "chip small" }, cid,
+      const isStream = !state.school.classes[cid] && (state.school.elective_groups || {})[cid];
+      classChips.append(el("span", { class: "chip small" + (isStream ? " stream" : "") }, scopeLabel(cid),
         el("button", { title: t("remove"), on: { click: () => {
           const cur = (tch.qualified_classes_by_subject[sid] || []).filter(x => x !== cid);
           if (cur.length) tch.qualified_classes_by_subject[sid] = cur;
@@ -602,18 +622,28 @@ function qualificationEditor(tch) {
         } } }, "×")));
     });
     const remainingClasses = clss.filter(([cid]) => !allowed.includes(cid));
-    if (remainingClasses.length) {
+    const remainingElectives = elgs.filter(([gid]) => !allowed.includes(gid));
+    if (remainingClasses.length || remainingElectives.length) {
       const csel = el("select", { class: "chip add small", style: "appearance:auto;border-radius:20px",
         on: { change: e => { if (e.target.value) {
           tch.qualified_classes_by_subject[sid] = [...allowed, e.target.value];
           render();
         } } } },
-        el("option", { value: "" }, "+ " + (hy ? "դասարան" : "class")));
-      remainingClasses.forEach(([cid]) => csel.append(el("option", { value: cid }, cid)));
+        el("option", { value: "" }, "+ " + (hy ? "դասարան/հոսք" : "class/stream")));
+      if (remainingClasses.length) {
+        const og = el("optgroup", { label: hy ? "Դասարաններ" : "Classes" });
+        remainingClasses.forEach(([cid]) => og.append(el("option", { value: cid }, cid)));
+        csel.append(og);
+      }
+      if (remainingElectives.length) {
+        const og = el("optgroup", { label: hy ? "Հոսքեր" : "Streams" });
+        remainingElectives.forEach(([gid, g]) => og.append(el("option", { value: gid }, g.name || gid)));
+        csel.append(og);
+      }
       classChips.append(csel);
     }
     if (!allowed.length) {
-      classChips.prepend(el("span", { class: "chip muted small" }, hy ? "ցանկացած դասարան" : "any class"));
+      classChips.prepend(el("span", { class: "chip muted small" }, hy ? "ցանկացած դասարան/հոսք" : "any class/stream"));
     }
 
     box.append(el("div", { class: "qualrow" },

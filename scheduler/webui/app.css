@@ -148,8 +148,9 @@ table.data td.act{text-align:right; width:54px}
 .chip.add{background:var(--surface-2); color:var(--ink-soft); border:1px dashed var(--line-strong); padding-right:10px}
 .chip.muted{background:transparent; color:var(--ink-faint); border:1px dashed var(--line); padding-right:10px; font-weight:500}
 .chip.small{font-size:11px; padding:2px 4px 2px 8px}
+.chip.stream{background:var(--warn-wash, #fff4e0); border-color:var(--warn, #d99a2b); color:var(--warn-deep, #8a5a10)}
 
-/* per-subject qualification editor (subject -> allowed classes) */
+/* per-subject qualification editor (subject -> allowed classes/streams) */
 .qualbox{display:flex; flex-direction:column; gap:6px; align-items:flex-start}
 .qualrow{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
 .qsubj{background:var(--surface-2); color:var(--ink); border-color:var(--line-strong); flex:0 0 auto}

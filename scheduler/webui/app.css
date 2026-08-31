@@ -146,6 +146,7 @@ table.data td.act{text-align:right; width:54px}
   border-radius:20px; padding:3px 5px 3px 10px}
 .chip button{border:0; background:transparent; color:var(--accent-deep); font-size:14px; line-height:1; padding:0 2px}
 .chip.add{background:var(--surface-2); color:var(--ink-soft); border:1px dashed var(--line-strong); padding-right:10px}
+.chip.muted{background:transparent; color:var(--ink-faint); border:1px dashed var(--line); padding-right:10px; font-weight:500}
 /* per-weekday availability editor */
 .availbox{display:flex; flex-direction:column; gap:5px; min-width:240px}
 .avail-day{display:flex; align-items:center; gap:7px}

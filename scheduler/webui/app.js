@@ -280,24 +280,26 @@ function cleanupSubject(sid) {
     if (tt.qualified_classes_by_subject) delete tt.qualified_classes_by_subject[sid];
   }
 }
-/* Remove a scope id (a class OR an elective/stream group) from every
-   teacher's per-subject allowed lists, so deleting it doesn't leave a
-   dangling reference. */
-function cleanupScope(scopeId) {
+/* Remove any scope entries matching a predicate from every teacher's
+   per-subject allowed lists, so deleting a class or stream doesn't leave a
+   dangling reference (plain class ids, and "group::class" composite ids). */
+function cleanupScopeWhere(matches) {
   for (const [, tt] of teacherEntries()) {
     const map = tt.qualified_classes_by_subject || {};
     for (const sid of Object.keys(map)) {
-      map[sid] = map[sid].filter(x => x !== scopeId);
+      map[sid] = map[sid].filter(sc => !matches(sc));
       if (!map[sid].length) delete map[sid];
     }
   }
 }
 function cleanupClass(cid) {
-  cleanupScope(cid);
+  // drop the plain class id, and any "group::cid" entry for this class
+  cleanupScopeWhere(sc => sc === cid || sc.endsWith("::" + cid));
   for (const [, g] of Object.entries(state.school.elective_groups || {})) g.member_classes = (g.member_classes || []).filter(x => x !== cid);
 }
 function cleanupElectiveGroup(gid) {
-  cleanupScope(gid);
+  // drop any legacy bare group id, and every "gid::*" composite entry
+  cleanupScopeWhere(sc => sc === gid || sc.startsWith(gid + "::"));
 }
 
 /* ---- Electives / streams (grades 10-12) ---- */
@@ -343,8 +345,12 @@ function electiveCard(gid) {
     chips.append(el("button", { class: "chip" + (on ? " on" : ""), type: "button",
       title: hy ? `Դասարան ${cid} (${c.grade}-րդ)` : `Class ${cid} (grade ${c.grade})`,
       on: { click: () => {
-        g.member_classes = on ? g.member_classes.filter(x => x !== cid)
-                              : [...g.member_classes, cid];
+        if (on) {
+          g.member_classes = g.member_classes.filter(x => x !== cid);
+          cleanupScopeWhere(sc => sc === gid + "::" + cid);
+        } else {
+          g.member_classes = [...g.member_classes, cid];
+        }
         render();
       } } }, cid));
   });
@@ -589,9 +595,12 @@ function secTeachers() {
 
 /* Build the "subject -> allowed classes/streams" qualification editor for one
    teacher. Each qualified subject gets its own row with its own scope-chip
-   picker (regular classes AND elective/stream groups are both selectable),
-   so the same teacher can be scoped differently per subject
-   (e.g. classes 5-7 for math, but only a specific stream for physics). */
+   picker. Regular classes are picked directly; a stream is picked ONE MEMBER
+   CLASS AT A TIME (e.g. "11Ա · Science"), since a stream's shared lecture
+   needs the teacher qualified for every one of its member classes, and a
+   school may want a teacher to cover a stream for one grade but not another
+   (e.g. the Science stream for grade 11 but not grade 10, even though both
+   share that one stream). Composite scope ids look like "group_id::class_id". */
 function qualificationEditor(tch) {
   const hy = state.lang === "hy";
   const subs = subjectEntries();
@@ -599,11 +608,17 @@ function qualificationEditor(tch) {
   const elgs = electiveEntries();
   const box = el("div", { class: "qualbox" });
 
-  const scopeLabel = id => {
-    if (state.school.classes[id]) return id;
-    const g = (state.school.elective_groups || {})[id];
-    if (g) return (g.name || id) + (hy ? " (հոսք)" : " (stream)");
-    return id;
+  const splitScope = sc => {
+    const i = sc.indexOf("::");
+    return i === -1 ? [null, sc] : [sc.slice(0, i), sc.slice(i + 2)];
+  };
+  const scopeLabel = sc => {
+    const [gid, cid] = splitScope(sc);
+    if (gid) {
+      const g = (state.school.elective_groups || {})[gid];
+      return cid + " · " + ((g && g.name) || gid);
+    }
+    return sc; // plain class id (or a stale/legacy bare stream id)
   };
 
   tch.qualified_subjects.forEach(sid => {
@@ -611,19 +626,29 @@ function qualificationEditor(tch) {
     const allowed = tch.qualified_classes_by_subject[sid] || [];
 
     const classChips = el("div", { class: "chips" });
-    allowed.forEach(cid => {
-      const isStream = !state.school.classes[cid] && (state.school.elective_groups || {})[cid];
-      classChips.append(el("span", { class: "chip small" + (isStream ? " stream" : "") }, scopeLabel(cid),
+    allowed.forEach(sc => {
+      const [gid] = splitScope(sc);
+      classChips.append(el("span", { class: "chip small" + (gid ? " stream" : "") }, scopeLabel(sc),
         el("button", { title: t("remove"), on: { click: () => {
-          const cur = (tch.qualified_classes_by_subject[sid] || []).filter(x => x !== cid);
+          const cur = (tch.qualified_classes_by_subject[sid] || []).filter(x => x !== sc);
           if (cur.length) tch.qualified_classes_by_subject[sid] = cur;
           else delete tch.qualified_classes_by_subject[sid];
           render();
         } } }, "×")));
     });
+
     const remainingClasses = clss.filter(([cid]) => !allowed.includes(cid));
-    const remainingElectives = elgs.filter(([gid]) => !allowed.includes(gid));
-    if (remainingClasses.length || remainingElectives.length) {
+    // one option per (stream, member class) pair not yet picked
+    const remainingStreamClasses = [];
+    elgs.forEach(([gid, g]) => {
+      (g.member_classes || []).forEach(cid => {
+        const key = gid + "::" + cid;
+        if (!allowed.includes(key)) {
+          remainingStreamClasses.push([key, cid + " · " + (g.name || gid)]);
+        }
+      });
+    });
+    if (remainingClasses.length || remainingStreamClasses.length) {
       const csel = el("select", { class: "chip add small", style: "appearance:auto;border-radius:20px",
         on: { change: e => { if (e.target.value) {
           tch.qualified_classes_by_subject[sid] = [...allowed, e.target.value];
@@ -635,9 +660,9 @@ function qualificationEditor(tch) {
         remainingClasses.forEach(([cid]) => og.append(el("option", { value: cid }, cid)));
         csel.append(og);
       }
-      if (remainingElectives.length) {
-        const og = el("optgroup", { label: hy ? "Հոսքեր" : "Streams" });
-        remainingElectives.forEach(([gid, g]) => og.append(el("option", { value: gid }, g.name || gid)));
+      if (remainingStreamClasses.length) {
+        const og = el("optgroup", { label: hy ? "Հոսքեր (դասարան · հոսք)" : "Streams (class · stream)" });
+        remainingStreamClasses.forEach(([key, label]) => og.append(el("option", { value: key }, label)));
         csel.append(og);
       }
       classChips.append(csel);

@@ -274,10 +274,19 @@ function isSplittable(sid, s) {
 }
 function cleanupSubject(sid) {
   for (const [, c] of classEntries()) delete c.weekly_hours[sid];
-  for (const [, tt] of teacherEntries()) tt.qualified_subjects = (tt.qualified_subjects || []).filter(x => x !== sid);
+  for (const [, tt] of teacherEntries()) {
+    tt.qualified_subjects = (tt.qualified_subjects || []).filter(x => x !== sid);
+    if (tt.qualified_classes_by_subject) delete tt.qualified_classes_by_subject[sid];
+  }
 }
 function cleanupClass(cid) {
-  for (const [, tt] of teacherEntries()) tt.qualified_classes = (tt.qualified_classes || []).filter(x => x !== cid);
+  for (const [, tt] of teacherEntries()) {
+    const map = tt.qualified_classes_by_subject || {};
+    for (const sid of Object.keys(map)) {
+      map[sid] = map[sid].filter(x => x !== cid);
+      if (!map[sid].length) delete map[sid];
+    }
+  }
   for (const [, g] of Object.entries(state.school.elective_groups || {})) g.member_classes = (g.member_classes || []).filter(x => x !== cid);
 }
 
@@ -517,48 +526,13 @@ function renameClass(oldId, newId) {
 
 /* ---- Teachers ---- */
 function secTeachers() {
-  const subs = subjectEntries();
-  const clss = classEntries();
   const rows = teacherEntries().map(([tid, tch]) => {
     tch.qualified_subjects = tch.qualified_subjects || [];
-    tch.qualified_classes = tch.qualified_classes || [];
+    tch.qualified_classes_by_subject = tch.qualified_classes_by_subject || {};
     tch.available_days = tch.available_days || [];
     tch.available_periods = tch.available_periods || [];
 
-    // qualified subjects as chips + add dropdown
-    const chips = el("div", { class: "chips" });
-    tch.qualified_subjects.forEach(sid => {
-      const s = state.school.subjects[sid];
-      chips.append(el("span", { class: "chip" }, (s ? nm(s) : sid),
-        el("button", { title: t("remove"), on: { click: () => { tch.qualified_subjects = tch.qualified_subjects.filter(x => x !== sid); render(); } } }, "×")));
-    });
-    const remaining = subs.filter(([sid]) => !tch.qualified_subjects.includes(sid));
-    if (remaining.length) {
-      const sel = el("select", { class: "chip add", style: "appearance:auto;border-radius:20px",
-        on: { change: e => { if (e.target.value) { tch.qualified_subjects.push(e.target.value); render(); } } } },
-        el("option", { value: "" }, "+ " + (state.lang === "hy" ? "առարկա" : "subject")));
-      remaining.forEach(([sid, s]) => sel.append(el("option", { value: sid }, nm(s) || sid)));
-      chips.append(sel);
-    }
-
-    // qualified classes as chips + add dropdown (empty = no restriction / any class)
-    const classChips = el("div", { class: "chips" });
-    tch.qualified_classes.forEach(cid => {
-      classChips.append(el("span", { class: "chip" }, cid,
-        el("button", { title: t("remove"), on: { click: () => { tch.qualified_classes = tch.qualified_classes.filter(x => x !== cid); render(); } } }, "×")));
-    });
-    const remainingClasses = clss.filter(([cid]) => !tch.qualified_classes.includes(cid));
-    if (remainingClasses.length) {
-      const csel = el("select", { class: "chip add", style: "appearance:auto;border-radius:20px",
-        on: { change: e => { if (e.target.value) { tch.qualified_classes.push(e.target.value); render(); } } } },
-        el("option", { value: "" }, "+ " + (state.lang === "hy" ? "դասարան" : "class")));
-      remainingClasses.forEach(([cid]) => csel.append(el("option", { value: cid }, cid)));
-      classChips.append(csel);
-    }
-    if (!tch.qualified_classes.length) {
-      classChips.prepend(el("span", { class: "chip muted" },
-        state.lang === "hy" ? "ցանկացած դասարան" : "any class"));
-    }
+    const qualCell = qualificationEditor(tch);
 
     const roleSel = el("select", { on: { change: e => (tch.role = e.target.value) } });
     ["primary", "subject", "admin"].forEach(r => {
@@ -573,8 +547,7 @@ function secTeachers() {
     return el("tr", {},
       el("td", {}, el("input", { type: "text", value: tch.name || "", placeholder: state.lang === "hy" ? "Անուն Ազգանուն" : "Full name",
         on: { input: e => (tch.name = e.target.value) } })),
-      el("td", { style: "min-width:230px" }, chips),
-      el("td", { style: "min-width:180px" }, classChips),
+      el("td", { style: "min-width:280px" }, qualCell),
       el("td", {}, roleSel),
       el("td", { class: "num" }, el("input", { type: "number", min: 1, max: 36, class: "cell",
         value: tch.max_weekly_load ?? "", placeholder: state.lang === "hy" ? "ավտո" : "auto",
@@ -585,23 +558,84 @@ function secTeachers() {
     );
   });
   const H = state.lang === "hy"
-    ? ["Անուն", "Որակավորում (առարկաներ)", "Դասարաններ", "Դեր", "Բեռ/շաբ", "Հասանելիություն"]
-    : ["Name", "Qualified subjects", "Classes", "Role", "Load/wk", "Availability"];
+    ? ["Անուն", "Որակավորում (առարկա → դասարաններ)", "Դեր", "Բեռ/շաբ", "Հասանելիություն"]
+    : ["Name", "Qualified subject → classes", "Role", "Load/wk", "Availability"];
   panel().append(
     head(t("navTeachers"),
       state.lang === "hy" ? "Ուսուցիչներն ու իրենց որակավորումները։ Դասերն ինքնաշխատ բաշխվում են որակավորման հիման վրա, եթե ձեռքով չեք ամրագրում։"
                           : "Teachers and their qualifications. Lessons are auto-assigned from qualifications unless you pin them."),
-    dataTable(H, rows, 7),
+    dataTable(H, rows, 6),
     el("p", { class: "sub", style: "margin-top:8px" },
       state.lang === "hy"
-        ? "Դասարաններ․ որ դասարաններին կարող է դասավանդել այս ուսուցիչը։ Դատարկ = սահմանափակում չկա (կարող է դասավանդել ցանկացած դասարանում)։"
-        : "Classes: which classes this teacher may be assigned to teach. Empty = no restriction (any class)."),
+        ? "Յուրաքանչյուր առարկայի կողքին ընտրեք, թե որ դասարաններին կարող է այն դասավանդել այս ուսուցիչը (օր. 5–7-րդ դասարաններին՝ մաթեմատիկա, 9–11-րդին՝ ֆիզիկա)։ Դատարկ = այդ առարկան կարող է դասավանդել ցանկացած դասարանում։"
+        : "Next to each subject, choose which classes this teacher may teach it to (e.g. classes 5–7 for math, 9–11 for physics). Empty = that subject may be taught to any class."),
     el("p", { class: "sub", style: "margin-top:4px" },
       state.lang === "hy"
         ? "Հասանելիություն․ սեղմեք օրվա պիտակին՝ ամբողջ օրն անջատելու/միացնելու համար, կամ առանձին ժամերի վրա։ Լրացված = հասանելի (լռելյայն՝ բոլոր ժամերը)։"
         : "Availability: click a weekday label to switch the whole day off/on, or click individual periods. Filled = available (default is every period)."),
     el("div", { class: "addrow" }, el("button", { class: "btn subtle small", on: { click: addTeacher } }, "+ " + t("add"))),
   );
+}
+
+/* Build the "subject -> allowed classes" qualification editor for one teacher.
+   Each qualified subject gets its own row with its own class-chip picker, so
+   the same teacher can be scoped to different classes per subject
+   (e.g. classes 5-7 for math, but only 9-11 for physics). */
+function qualificationEditor(tch) {
+  const hy = state.lang === "hy";
+  const subs = subjectEntries();
+  const clss = classEntries();
+  const box = el("div", { class: "qualbox" });
+
+  tch.qualified_subjects.forEach(sid => {
+    const subj = state.school.subjects[sid];
+    const allowed = tch.qualified_classes_by_subject[sid] || [];
+
+    const classChips = el("div", { class: "chips" });
+    allowed.forEach(cid => {
+      classChips.append(el("span", { class: "chip small" }, cid,
+        el("button", { title: t("remove"), on: { click: () => {
+          const cur = (tch.qualified_classes_by_subject[sid] || []).filter(x => x !== cid);
+          if (cur.length) tch.qualified_classes_by_subject[sid] = cur;
+          else delete tch.qualified_classes_by_subject[sid];
+          render();
+        } } }, "×")));
+    });
+    const remainingClasses = clss.filter(([cid]) => !allowed.includes(cid));
+    if (remainingClasses.length) {
+      const csel = el("select", { class: "chip add small", style: "appearance:auto;border-radius:20px",
+        on: { change: e => { if (e.target.value) {
+          tch.qualified_classes_by_subject[sid] = [...allowed, e.target.value];
+          render();
+        } } } },
+        el("option", { value: "" }, "+ " + (hy ? "դասարան" : "class")));
+      remainingClasses.forEach(([cid]) => csel.append(el("option", { value: cid }, cid)));
+      classChips.append(csel);
+    }
+    if (!allowed.length) {
+      classChips.prepend(el("span", { class: "chip muted small" }, hy ? "ցանկացած դասարան" : "any class"));
+    }
+
+    box.append(el("div", { class: "qualrow" },
+      el("span", { class: "chip qsubj" }, nm(subj) || sid,
+        el("button", { title: t("remove"), on: { click: () => {
+          tch.qualified_subjects = tch.qualified_subjects.filter(x => x !== sid);
+          delete tch.qualified_classes_by_subject[sid];
+          render();
+        } } }, "×")),
+      el("span", { class: "qarrow" }, "→"),
+      classChips));
+  });
+
+  const remainingSubs = subs.filter(([sid]) => !tch.qualified_subjects.includes(sid));
+  if (remainingSubs.length) {
+    const sel = el("select", { class: "chip add", style: "appearance:auto;border-radius:20px",
+      on: { change: e => { if (e.target.value) { tch.qualified_subjects.push(e.target.value); render(); } } } },
+      el("option", { value: "" }, "+ " + (hy ? "առարկա" : "subject")));
+    remainingSubs.forEach(([sid, s]) => sel.append(el("option", { value: sid }, nm(s) || sid)));
+    box.append(sel);
+  }
+  return box;
 }
 
 /* periods available in the current school (used to size the availability grid) */
@@ -680,7 +714,7 @@ function migrateAvailability(tch, P) {
 }
 function addTeacher() {
   const id = uid("t");
-  state.school.teachers[id] = { name: "", qualified_subjects: [], qualified_classes: [], role: "subject",
+  state.school.teachers[id] = { name: "", qualified_subjects: [], qualified_classes_by_subject: {}, role: "subject",
     max_weekly_load: null, available_days: [], available_periods: [], available_periods_by_day: {} };
   render();
 }

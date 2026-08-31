@@ -147,6 +147,13 @@ table.data td.act{text-align:right; width:54px}
 .chip button{border:0; background:transparent; color:var(--accent-deep); font-size:14px; line-height:1; padding:0 2px}
 .chip.add{background:var(--surface-2); color:var(--ink-soft); border:1px dashed var(--line-strong); padding-right:10px}
 .chip.muted{background:transparent; color:var(--ink-faint); border:1px dashed var(--line); padding-right:10px; font-weight:500}
+.chip.small{font-size:11px; padding:2px 4px 2px 8px}
+
+/* per-subject qualification editor (subject -> allowed classes) */
+.qualbox{display:flex; flex-direction:column; gap:6px; align-items:flex-start}
+.qualrow{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+.qsubj{background:var(--surface-2); color:var(--ink); border-color:var(--line-strong); flex:0 0 auto}
+.qarrow{color:var(--ink-faint); font-size:12px}
 /* per-weekday availability editor */
 .availbox{display:flex; flex-direction:column; gap:5px; min-width:240px}
 .avail-day{display:flex; align-items:center; gap:7px}

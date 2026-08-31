@@ -202,6 +202,60 @@ def main() -> int:
         "validator missed a per-subject class-scope violation"
     print("[ok] validator catches a teacher used outside their per-subject class scope")
 
+    # 10. teachers can also be qualified for a STREAM/ELECTIVE GROUP directly
+    #     (its own id), not only for regular classes
+    raw4 = {
+        "year": "streamQual", "periods_per_day": 6,
+        "subjects": {"chem": {"name_hy": "Քիմ"}},
+        "rooms": {"r1": {"name": "101", "type": "classroom"}},
+        "classes": {
+            "X": {"grade": 10, "home_room": "r1", "weekly_hours": {}},
+            "Y": {"grade": 10, "home_room": "r1", "weekly_hours": {}},
+        },
+        "elective_groups": {
+            "g1": {"name": "Chem Stream", "band": "band1",
+                  "member_classes": ["X", "Y"], "weekly_hours": {"chem": 2}},
+        },
+        "teachers": {
+            # qualified for chem, but only in class 'X' — NOT in the stream
+            # itself, so it must not cover the stream's lecture
+            "t1": {"name": "T1", "qualified_subjects": ["chem"],
+                  "qualified_classes_by_subject": {"chem": ["X"]}},
+            "t2": {"name": "T2", "qualified_subjects": []},
+        },
+    }
+    sq = build_school(raw4)
+    sq_units = build_units(sq)
+    try:
+        assign_teachers(sq, sq_units)
+        assert False, "expected AssignmentError: t1 is not qualified for stream g1"
+    except AssignmentError as e:
+        assert "g1" in str(e)
+    print("[ok] a class-only qualification does not cover a stream's own lecture")
+
+    # scoping t1 to the stream id itself fixes it
+    raw4["teachers"]["t1"]["qualified_classes_by_subject"]["chem"] = ["g1"]
+    sq2 = build_school(raw4)
+    sq_units2 = build_units(sq2)
+    sq_tof, _ = assign_teachers(sq2, sq_units2)
+    assert sq_tof["E:g1:chem"] == "t1"
+    print("[ok] qualifying a teacher for the stream id directly allows the assignment")
+
+    sq_res = solve(sq2, sq_units2, sq_tof, max_seconds=10, workers=4)
+    assert sq_res.lessons, "stream qualification sample should solve"
+    sq_clean = validate(sq2, sq_res.lessons)
+    assert sq_clean["hard"] == [], sq_clean["hard"]
+    print("[ok] stream qualification: clean schedule validates")
+
+    # tamper: swap in t2, who isn't qualified for chem at all
+    sq_tampered = [PlacedLesson(L.class_id, L.subject_id, "t2", L.day, L.period,
+                                L.room_id, kind=L.kind, group_id=L.group_id)
+                  for L in sq_res.lessons]
+    sq_rep = validate(sq2, sq_tampered)
+    assert any("QUALIFICATION" in v for v in sq_rep["hard"]), \
+        "validator missed an unqualified teacher on a stream lecture"
+    print("[ok] validator rejects an unqualified teacher placed on a stream lecture")
+
     print("\nAll checks passed.")
     return 0
 

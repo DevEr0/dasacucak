@@ -62,14 +62,18 @@ class Teacher:
     #   * a day ABSENT from the map  -> available every period that day (the default);
     #   * a day mapped to []          -> unavailable the whole day.
     available_periods_by_day: dict = field(default_factory=dict)
-    # Per-subject class restriction: maps a qualified subject id to the list
-    # of classes (e.g. "7Ա", "8Բ") this teacher may teach THAT subject to.
+    # Per-subject class/stream restriction: maps a qualified subject id to the
+    # list of scopes this teacher may teach THAT subject to. A scope is either
+    # a regular class id (e.g. "7Ա") or an elective/stream group's own id
+    # (e.g. "g10_sci"), letting a teacher be qualified for a stream directly
+    # without listing every class that feeds into it.
     #   * a subject ABSENT from the map (or mapped to []) -> no restriction for
-    #     that subject (may teach it to any class, the default);
-    #   * a subject mapped to a non-empty list -> only those classes for that
+    #     that subject (may teach it to any class/stream, the default);
+    #   * a subject mapped to a non-empty list -> only those scopes for that
     #     subject.
     # This lets one teacher be scoped differently per subject, e.g. classes
-    # 5–7 for math but only 9–11 for physics.
+    # 5–7 for math but only 9–11 for physics, or a specific stream for an
+    # elective.
     qualified_classes_by_subject: dict = field(default_factory=dict)
 
     def resolved_cap(self) -> int:
@@ -77,15 +81,16 @@ class Teacher:
             return self.max_weekly_load
         return {"primary": 18, "subject": 20, "admin": 12}.get(self.role, 20)
 
-    def can_teach(self, subject_id: str, class_id: str) -> bool:
-        """True if this teacher may be assigned `subject_id` for `class_id`.
-        Requires the subject to be in `qualified_subjects`; if that subject
-        has a class list in `qualified_classes_by_subject`, `class_id` must
-        be in it, otherwise (no list, or empty list) any class is allowed."""
+    def can_teach(self, subject_id: str, scope_id: str) -> bool:
+        """True if this teacher may be assigned `subject_id` for `scope_id`
+        (a class id, or an elective/stream group's own id). Requires the
+        subject to be in `qualified_subjects`; if that subject has a scope
+        list in `qualified_classes_by_subject`, `scope_id` must be in it,
+        otherwise (no list, or empty list) any class/stream is allowed."""
         if subject_id not in self.qualified_subjects:
             return False
         allowed = self.qualified_classes_by_subject.get(subject_id)
-        return not allowed or class_id in allowed
+        return not allowed or scope_id in allowed
 
     def can_work(self, day_idx: int, period: int) -> bool:
         # Per-weekday model takes precedence when present.

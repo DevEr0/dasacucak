@@ -13,10 +13,12 @@ class AssignmentError(Exception):
 
 
 def _unit_classes(u: Unit) -> tuple:
-    """The class id(s) a unit's students belong to (elective groups draw from
-    several classes at once)."""
+    """The scope id(s) checked against a teacher's per-subject allowed list.
+    For elective units this is the STREAM'S OWN id (so a teacher can be
+    qualified directly for e.g. "Sciences" without listing every member
+    class); for whole-class/split units it's the class id."""
     if u.kind == "elective":
-        return u.member_classes
+        return (u.group_id,)
     return (u.class_id,)
 
 
@@ -228,12 +230,13 @@ def preflight(school: School, units: list[Unit], teacher_of: dict):
                          f"fit in {cap_slots} available slots.")
 
     # teacher qualified_classes_by_subject sanity ---------------------------
+    valid_scopes = set(school.classes) | set(school.elective_groups)
     for t in school.teachers.values():
         for sid, cls_list in t.qualified_classes_by_subject.items():
-            unknown = [c for c in cls_list if c not in school.classes]
+            unknown = [c for c in cls_list if c not in valid_scopes]
             if unknown:
                 fatal.append(f"Teacher {t.name}: qualified_classes_by_subject "
-                             f"for '{sid}' references unknown class(es) "
+                             f"for '{sid}' references unknown class/stream(s) "
                              f"{', '.join(unknown)}.")
 
     # teacher load ---------------------------------------------------------

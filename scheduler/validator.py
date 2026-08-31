@@ -223,9 +223,11 @@ def validate(school: School, lessons: list[PlacedLesson]) -> dict:
             hard.append(f"TEACHER: unknown teacher '{x.teacher_id}' assigned to "
                         f"{x.class_id or x.group_id}/{x.subject_id}.")
             continue
-        grp = groups.get(x.group_id) if x.kind == "elective" else None
-        class_ids = grp.member_classes if grp else [x.class_id]
-        bad = [c for c in class_ids if not t.can_teach(x.subject_id, c)]
+        # for a stream/elective lesson, the scope checked is the STREAM's own
+        # id (a teacher may be qualified for a stream directly); for a
+        # whole-class/split lesson it's the class id.
+        scope_ids = [x.group_id] if x.kind == "elective" else [x.class_id]
+        bad = [c for c in scope_ids if not t.can_teach(x.subject_id, c)]
         if bad:
             if x.subject_id not in t.qualified_subjects:
                 hard.append(f"QUALIFICATION: {t.name} is not qualified to teach "

@@ -5,21 +5,11 @@ from __future__ import annotations
 from collections import defaultdict
 
 from . import curriculum as C
-from .models import School, Unit
+from .models import School, Unit, unit_scope_ids
 
 
 class AssignmentError(Exception):
     pass
-
-
-def _unit_classes(u: Unit) -> tuple:
-    """The scope id(s) checked against a teacher's per-subject allowed list.
-    For elective units this is the STREAM'S OWN id (so a teacher can be
-    qualified directly for e.g. "Sciences" without listing every member
-    class); for whole-class/split units it's the class id."""
-    if u.kind == "elective":
-        return (u.group_id,)
-    return (u.class_id,)
 
 
 # --------------------------------------------------------------------------
@@ -99,20 +89,26 @@ def assign_teachers(school: School, units: list[Unit],
 
     for u in todo:
         sid = u.subject_id
-        unit_classes = _unit_classes(u)
+        scope_ids = unit_scope_ids(u)
         subject_qualified = [t for t in school.teachers.values()
                              if sid in t.qualified_subjects]
         if not subject_qualified:
             raise AssignmentError(
                 f"No teacher is qualified for subject '{sid}' ({u.label()}).")
         qualified = [t for t in subject_qualified
-                    if all(t.can_teach(sid, cid) for cid in unit_classes)]
+                    if all(t.can_teach(sid, sc) for sc in scope_ids)]
         if not qualified:
+            if u.kind == "elective":
+                missing_desc = (f"stream '{u.group_id}' for class(es) "
+                                f"{', '.join(u.member_classes)}")
+            else:
+                missing_desc = f"class {u.class_id}"
             raise AssignmentError(
                 f"No teacher qualified for '{sid}' is allowed to teach it to "
-                f"{', '.join(unit_classes)} ({u.label()}). Qualified for the "
-                f"subject: {[t.id for t in subject_qualified]}. Widen one of "
-                f"their allowed classes for '{sid}', or add another qualified "
+                f"{missing_desc} ({u.label()}). Qualified for the subject: "
+                f"{[t.id for t in subject_qualified]}. Widen one of their "
+                f"allowed classes/streams for '{sid}' (for a stream, every "
+                f"member class must be covered), or add another qualified "
                 f"teacher.")
         fits = [t for t in qualified if load[t.id] + u.hours <= t.resolved_cap()]
         if not fits and not allow_overload:
@@ -230,14 +226,19 @@ def preflight(school: School, units: list[Unit], teacher_of: dict):
                          f"fit in {cap_slots} available slots.")
 
     # teacher qualified_classes_by_subject sanity ---------------------------
-    valid_scopes = set(school.classes) | set(school.elective_groups)
     for t in school.teachers.values():
-        for sid, cls_list in t.qualified_classes_by_subject.items():
-            unknown = [c for c in cls_list if c not in valid_scopes]
-            if unknown:
-                fatal.append(f"Teacher {t.name}: qualified_classes_by_subject "
-                             f"for '{sid}' references unknown class/stream(s) "
-                             f"{', '.join(unknown)}.")
+        for sid, scopes in t.qualified_classes_by_subject.items():
+            for sc in scopes:
+                if "::" in sc:
+                    gid, cid = sc.split("::", 1)
+                    grp = school.elective_groups.get(gid)
+                    if not grp or cid not in grp.member_classes:
+                        fatal.append(f"Teacher {t.name}: qualified_classes_by_subject "
+                                     f"for '{sid}' references unknown stream/class "
+                                     f"pair '{sc}'.")
+                elif sc not in school.classes:
+                    fatal.append(f"Teacher {t.name}: qualified_classes_by_subject "
+                                 f"for '{sid}' references unknown class '{sc}'.")
 
     # teacher load ---------------------------------------------------------
     load = defaultdict(int)

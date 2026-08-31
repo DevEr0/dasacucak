@@ -15,7 +15,7 @@ from collections import defaultdict
 
 from . import curriculum as C
 from .assigner import build_units
-from .models import School
+from .models import School, elective_scope_id
 from .solver import PlacedLesson
 
 
@@ -223,10 +223,16 @@ def validate(school: School, lessons: list[PlacedLesson]) -> dict:
             hard.append(f"TEACHER: unknown teacher '{x.teacher_id}' assigned to "
                         f"{x.class_id or x.group_id}/{x.subject_id}.")
             continue
-        # for a stream/elective lesson, the scope checked is the STREAM's own
-        # id (a teacher may be qualified for a stream directly); for a
-        # whole-class/split lesson it's the class id.
-        scope_ids = [x.group_id] if x.kind == "elective" else [x.class_id]
+        # a stream/elective lecture is shared by ALL its member classes at
+        # once, so the teacher must be qualified for the stream in EVERY one
+        # of them (one composite scope per member class); a whole-class/split
+        # lesson just checks the class id.
+        if x.kind == "elective":
+            grp = groups.get(x.group_id)
+            member_classes = grp.member_classes if grp else []
+            scope_ids = [elective_scope_id(x.group_id, cid) for cid in member_classes]
+        else:
+            scope_ids = [x.class_id]
         bad = [c for c in scope_ids if not t.can_teach(x.subject_id, c)]
         if bad:
             if x.subject_id not in t.qualified_subjects:
@@ -237,7 +243,7 @@ def validate(school: School, lessons: list[PlacedLesson]) -> dict:
                 allowed = t.qualified_classes_by_subject.get(x.subject_id)
                 hard.append(f"QUALIFICATION: {t.name} is qualified for "
                             f"'{x.subject_id}' only in {', '.join(allowed)} — "
-                            f"assigned to {', '.join(bad)} at day {x.day} "
+                            f"not covering {', '.join(bad)} at day {x.day} "
                             f"period {x.period}.")
 
     # ---- rooms ----------------------------------------------------------------

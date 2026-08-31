@@ -256,6 +256,62 @@ def main() -> int:
         "validator missed an unqualified teacher on a stream lecture"
     print("[ok] validator rejects an unqualified teacher placed on a stream lecture")
 
+    # 11. GRANULAR per-(class, stream) qualification — e.g. the same named
+    #     stream spans grade-10 and grade-11 classes, and a teacher may be
+    #     approved for the stream in grade 11 but not in grade 10
+    raw5 = {
+        "year": "streamGranular", "periods_per_day": 6,
+        "subjects": {"sci": {"name_hy": "Գիտություն"}},
+        "rooms": {"r1": {"name": "101", "type": "classroom"}},
+        "classes": {
+            "10A": {"grade": 10, "home_room": "r1", "weekly_hours": {}},
+            "11A": {"grade": 11, "home_room": "r1", "weekly_hours": {}},
+        },
+        "elective_groups": {
+            "sci_stream": {"name": "Science", "band": "band1",
+                          "member_classes": ["10A", "11A"],
+                          "weekly_hours": {"sci": 2}},
+        },
+        "teachers": {
+            # approved for the Science stream in grade 11 ONLY
+            "t1": {"name": "T1", "qualified_subjects": ["sci"],
+                  "qualified_classes_by_subject": {"sci": ["sci_stream::11A"]}},
+        },
+    }
+    gr = build_school(raw5)
+    gr_units = build_units(gr)
+    try:
+        assign_teachers(gr, gr_units)
+        assert False, ("expected AssignmentError: t1 is approved for the "
+                       "stream in 11A only, not the shared lecture that "
+                       "also includes 10A")
+    except AssignmentError as e:
+        assert "10A" in str(e) or "sci_stream" in str(e)
+    print("[ok] class-within-stream qualification: 11A-only approval does not "
+         "cover the shared lecture (which also serves 10A)")
+
+    # approving the same teacher for the stream in 10A too now covers it
+    raw5["teachers"]["t1"]["qualified_classes_by_subject"]["sci"] = [
+        "sci_stream::11A", "sci_stream::10A"]
+    gr2 = build_school(raw5)
+    gr_units2 = build_units(gr2)
+    gr_tof, _ = assign_teachers(gr2, gr_units2)
+    assert gr_tof["E:sci_stream:sci"] == "t1"
+    print("[ok] approving both member classes of the stream allows the assignment")
+
+    # validator: t1 approved for 11A only in a DIFFERENT (still hypothetical)
+    # school where the stream keeps just that one class approved is fine on
+    # its own, but re-checking against the two-class stream must still fail
+    raw5["teachers"]["t1"]["qualified_classes_by_subject"]["sci"] = ["sci_stream::11A"]
+    gr3 = build_school(raw5)
+    fake_lesson = [PlacedLesson("", "sci", "t1", 0, 1, "r1",
+                                kind="elective", group_id="sci_stream")]
+    gr_rep = validate(gr3, fake_lesson)
+    assert any("QUALIFICATION" in v and "10A" in v for v in gr_rep["hard"]), \
+        "validator missed a partially-approved teacher on a multi-class stream"
+    print("[ok] validator names the specific missing class when a stream "
+         "teacher is only partially approved")
+
     print("\nAll checks passed.")
     return 0
 

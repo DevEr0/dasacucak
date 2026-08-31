@@ -195,6 +195,36 @@ class Unit:
         return f"{self.class_id}/{self.subject_id}"
 
 
+# --------------------------------------------------------------------------
+# Teacher qualification scope ids.
+#
+# A "scope id" is what appears in Teacher.qualified_classes_by_subject lists:
+#   * a plain class id (e.g. "7Ա")                       -> a whole-class/
+#     split lesson for that class;
+#   * "group_id::class_id" (e.g. "g10_sci::11Ա")          -> ONE member
+#     class's share of a stream/elective group's lecture.
+#
+# A stream/elective lecture is a single shared session for ALL its member
+# classes at once, so a teacher only covers it if they are qualified for
+# EVERY one of its member classes within that specific stream — being
+# qualified for "11Ա" in general does not imply "11Ա in the Science stream",
+# and being qualified for the Science stream via one class does not cover a
+# DIFFERENT class also enrolled in that same stream. This lets a school
+# record, e.g., that a teacher can teach the Science stream to grade 11 but
+# not to grade 10, even though both grades share that one named stream.
+# --------------------------------------------------------------------------
+def elective_scope_id(group_id: str, class_id: str) -> str:
+    return f"{group_id}::{class_id}"
+
+
+def unit_scope_ids(u: Unit) -> tuple:
+    """The scope id(s) that must ALL be covered by a teacher's per-subject
+    allowed list for them to be assignable to this unit."""
+    if u.kind == "elective":
+        return tuple(elective_scope_id(u.group_id, cid) for cid in u.member_classes)
+    return (u.class_id,)
+
+
 @dataclass
 class ElectiveGroup:
     """A stream/elective group: students drawn from several classes who meet

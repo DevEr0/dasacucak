@@ -28,17 +28,35 @@ def _parse_periods_by_day(raw_val) -> dict:
     return out
 
 
-def _parse_classes_by_subject(raw_val, valid_subjects) -> dict:
-    """Normalize {"math": ["7A","8A"], ...} -> dict, dropping unknown subjects
-    and empty lists (both mean 'no restriction', so storing them is noise)."""
+def _parse_classes_by_subject(raw_val, valid_subjects, classes, elective_groups) -> dict:
+    """Normalize {"math": ["7A", "g10_sci::11A", ...], ...} -> dict, dropping
+    unknown subjects and empty lists (both mean 'no restriction', so storing
+    them is noise). Each entry is either a plain class id, an already-composite
+    "group_id::class_id" scope (validated against that group's real members),
+    or (for back-compat with older data) a bare elective-group id, which is
+    transparently expanded into one composite scope per current member class
+    of that group — i.e. "the whole stream" becomes "every class in it"."""
     out: dict = {}
     if isinstance(raw_val, dict):
-        for sid, classes in raw_val.items():
+        for sid, scopes in raw_val.items():
             if sid not in valid_subjects:
                 continue
-            cls = [c for c in (classes or []) if c]
-            if cls:
-                out[sid] = cls
+            resolved: list = []
+            for sc in (scopes or []):
+                if not sc:
+                    continue
+                if "::" in sc:
+                    gid, cid = sc.split("::", 1)
+                    grp = elective_groups.get(gid)
+                    if grp and cid in grp.member_classes:
+                        resolved.append(sc)
+                elif sc in classes:
+                    resolved.append(sc)
+                elif sc in elective_groups:                # legacy: bare stream id
+                    grp = elective_groups[sc]
+                    resolved.extend(f"{sc}::{cid}" for cid in grp.member_classes)
+            if resolved:
+                out[sid] = sorted(set(resolved))
     return out
 
 
@@ -98,7 +116,8 @@ def build_school(raw: dict) -> School:
             available_periods_by_day=_parse_periods_by_day(
                 t.get("available_periods_by_day", {})),
             qualified_classes_by_subject=_parse_classes_by_subject(
-                t.get("qualified_classes_by_subject", {}), subjects),
+                t.get("qualified_classes_by_subject", {}), subjects,
+                classes, elective_groups),
         )
         for tid, t in raw["teachers"].items()
     }

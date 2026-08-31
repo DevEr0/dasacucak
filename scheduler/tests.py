@@ -10,7 +10,7 @@ from __future__ import annotations
 import copy
 
 from .loader import build_school, load_school
-from .assigner import assign_teachers, build_units, preflight
+from .assigner import AssignmentError, assign_teachers, build_units, preflight
 from .solver import PlacedLesson, diagnose, solve
 from .validator import is_acceptable, validate
 
@@ -117,6 +117,48 @@ def main() -> int:
     rules = {d["rule"] for d in diag}
     assert "teacher_availability" in rules, f"diagnosis missed cause: {diag}"
     print(f"[ok] diagnosis: {len(diag)} minimal conflict items")
+
+    # 8. qualified_classes restricts which classes a teacher may be assigned
+    raw2 = {
+        "year": "qc", "periods_per_day": 6,
+        "subjects": {"math": {"name_hy": "Մաթ"}},
+        "rooms": {"r1": {"name": "101", "type": "classroom"},
+                 "r2": {"name": "102", "type": "classroom"}},
+        "classes": {
+            "A": {"grade": 5, "home_room": "r1", "weekly_hours": {"math": 3}},
+            "B": {"grade": 5, "home_room": "r2", "weekly_hours": {"math": 3}},
+        },
+        "teachers": {
+            "t1": {"name": "T1", "qualified_subjects": ["math"], "qualified_classes": ["A"]},
+        },
+    }
+    qs = build_school(raw2)
+    qc_units = build_units(qs)
+    try:
+        assign_teachers(qs, qc_units)
+        assert False, "expected AssignmentError: t1 is not qualified for class B"
+    except AssignmentError as e:
+        assert "B" in str(e)
+    print("[ok] qualified_classes blocks an out-of-scope auto-assignment")
+
+    # adding a second, unrestricted teacher fixes it
+    raw2["teachers"]["t2"] = {"name": "T2", "qualified_subjects": ["math"]}
+    qs2 = build_school(raw2)
+    qc_units2 = build_units(qs2)
+    tof2, _ = assign_teachers(qs2, qc_units2)
+    assert tof2["C:A:math"] == "t1"
+    assert tof2["C:B:math"] == "t2"
+    print("[ok] qualified_classes: auto-assignment routes B to the unrestricted teacher")
+
+    # validator independently rejects a hand-edited swap that breaks it
+    res2 = solve(qs2, qc_units2, tof2, max_seconds=10, workers=4)
+    assert res2.lessons, "qualified_classes sample should solve"
+    tampered = [PlacedLesson("B", L.subject_id, "t1", L.day, L.period, L.room_id)
+               if L.class_id == "B" else L for L in res2.lessons]
+    rep2 = validate(qs2, tampered)
+    assert any("QUALIFICATION" in v for v in rep2["hard"]), \
+        "validator missed a teacher assigned outside their qualified classes"
+    print("[ok] validator rejects a teacher placed outside their qualified classes")
 
     print("\nAll checks passed.")
     return 0

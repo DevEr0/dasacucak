@@ -216,6 +216,24 @@ def validate(school: School, lessons: list[PlacedLesson]) -> dict:
                 f"{t.name}: {load} h/week exceeds the legal maximum "
                 f"{C.LEGAL_TEACHER_MAX} h.", "HO-160-N Art. 25(3)"))
 
+    # ---- teacher qualified classes ---------------------------------------
+    for x in L:
+        t = school.teachers.get(x.teacher_id)
+        if t is None:
+            hard.append(f"TEACHER: unknown teacher '{x.teacher_id}' assigned to "
+                        f"{x.class_id or x.group_id}/{x.subject_id}.")
+            continue
+        if not t.qualified_classes:
+            continue
+        grp = groups.get(x.group_id) if x.kind == "elective" else None
+        class_ids = grp.member_classes if grp else [x.class_id]
+        bad = [c for c in class_ids if not t.can_teach_class(c)]
+        if bad:
+            hard.append(f"QUALIFICATION: {t.name} is not allowed to teach "
+                        f"class(es) {', '.join(bad)} (allowed: "
+                        f"{', '.join(t.qualified_classes)}) — assigned "
+                        f"{x.subject_id} at day {x.day} period {x.period}.")
+
     # ---- rooms ----------------------------------------------------------------
     for x in L:
         subj = school.subjects.get(x.subject_id)

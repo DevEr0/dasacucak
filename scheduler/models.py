@@ -62,11 +62,20 @@ class Teacher:
     #   * a day ABSENT from the map  -> available every period that day (the default);
     #   * a day mapped to []          -> unavailable the whole day.
     available_periods_by_day: dict = field(default_factory=dict)
+    # Which classes (e.g. "7Ա", "8Բ") this teacher may be assigned to teach.
+    #   * empty list -> no restriction (may teach any class, the default);
+    #   * non-empty  -> only the listed classes.
+    qualified_classes: list = field(default_factory=list)
 
     def resolved_cap(self) -> int:
         if self.max_weekly_load is not None:
             return self.max_weekly_load
         return {"primary": 18, "subject": 20, "admin": 12}.get(self.role, 20)
+
+    def can_teach_class(self, class_id: str) -> bool:
+        """True if this teacher may be assigned lessons for `class_id`.
+        An empty `qualified_classes` list means no restriction."""
+        return not self.qualified_classes or class_id in self.qualified_classes
 
     def can_work(self, day_idx: int, period: int) -> bool:
         # Per-weekday model takes precedence when present.

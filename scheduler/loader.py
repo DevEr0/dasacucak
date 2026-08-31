@@ -83,6 +83,7 @@ def build_school(raw: dict) -> School:
             available_periods=list(t.get("available_periods", [])),
             available_periods_by_day=_parse_periods_by_day(
                 t.get("available_periods_by_day", {})),
+            qualified_classes=list(t.get("qualified_classes", [])),
         )
         for tid, t in raw["teachers"].items()
     }

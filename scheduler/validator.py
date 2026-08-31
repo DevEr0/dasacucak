@@ -216,23 +216,27 @@ def validate(school: School, lessons: list[PlacedLesson]) -> dict:
                 f"{t.name}: {load} h/week exceeds the legal maximum "
                 f"{C.LEGAL_TEACHER_MAX} h.", "HO-160-N Art. 25(3)"))
 
-    # ---- teacher qualified classes ---------------------------------------
+    # ---- teacher qualified classes (per subject) ---------------------------
     for x in L:
         t = school.teachers.get(x.teacher_id)
         if t is None:
             hard.append(f"TEACHER: unknown teacher '{x.teacher_id}' assigned to "
                         f"{x.class_id or x.group_id}/{x.subject_id}.")
             continue
-        if not t.qualified_classes:
-            continue
         grp = groups.get(x.group_id) if x.kind == "elective" else None
         class_ids = grp.member_classes if grp else [x.class_id]
-        bad = [c for c in class_ids if not t.can_teach_class(c)]
+        bad = [c for c in class_ids if not t.can_teach(x.subject_id, c)]
         if bad:
-            hard.append(f"QUALIFICATION: {t.name} is not allowed to teach "
-                        f"class(es) {', '.join(bad)} (allowed: "
-                        f"{', '.join(t.qualified_classes)}) — assigned "
-                        f"{x.subject_id} at day {x.day} period {x.period}.")
+            if x.subject_id not in t.qualified_subjects:
+                hard.append(f"QUALIFICATION: {t.name} is not qualified to teach "
+                            f"'{x.subject_id}' at all — assigned to "
+                            f"{', '.join(bad)} at day {x.day} period {x.period}.")
+            else:
+                allowed = t.qualified_classes_by_subject.get(x.subject_id)
+                hard.append(f"QUALIFICATION: {t.name} is qualified for "
+                            f"'{x.subject_id}' only in {', '.join(allowed)} — "
+                            f"assigned to {', '.join(bad)} at day {x.day} "
+                            f"period {x.period}.")
 
     # ---- rooms ----------------------------------------------------------------
     for x in L:

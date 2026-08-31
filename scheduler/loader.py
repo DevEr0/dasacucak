@@ -28,6 +28,20 @@ def _parse_periods_by_day(raw_val) -> dict:
     return out
 
 
+def _parse_classes_by_subject(raw_val, valid_subjects) -> dict:
+    """Normalize {"math": ["7A","8A"], ...} -> dict, dropping unknown subjects
+    and empty lists (both mean 'no restriction', so storing them is noise)."""
+    out: dict = {}
+    if isinstance(raw_val, dict):
+        for sid, classes in raw_val.items():
+            if sid not in valid_subjects:
+                continue
+            cls = [c for c in (classes or []) if c]
+            if cls:
+                out[sid] = cls
+    return out
+
+
 def build_school(raw: dict) -> School:
     subjects = {
         sid: Subject(
@@ -83,7 +97,8 @@ def build_school(raw: dict) -> School:
             available_periods=list(t.get("available_periods", [])),
             available_periods_by_day=_parse_periods_by_day(
                 t.get("available_periods_by_day", {})),
-            qualified_classes=list(t.get("qualified_classes", [])),
+            qualified_classes_by_subject=_parse_classes_by_subject(
+                t.get("qualified_classes_by_subject", {}), subjects),
         )
         for tid, t in raw["teachers"].items()
     }

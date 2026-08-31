@@ -118,7 +118,8 @@ def main() -> int:
     assert "teacher_availability" in rules, f"diagnosis missed cause: {diag}"
     print(f"[ok] diagnosis: {len(diag)} minimal conflict items")
 
-    # 8. qualified_classes restricts which classes a teacher may be assigned
+    # 8. qualified_classes_by_subject restricts which classes a teacher may
+    #    be assigned FOR A GIVEN SUBJECT
     raw2 = {
         "year": "qc", "periods_per_day": 6,
         "subjects": {"math": {"name_hy": "Մաթ"}},
@@ -129,7 +130,8 @@ def main() -> int:
             "B": {"grade": 5, "home_room": "r2", "weekly_hours": {"math": 3}},
         },
         "teachers": {
-            "t1": {"name": "T1", "qualified_subjects": ["math"], "qualified_classes": ["A"]},
+            "t1": {"name": "T1", "qualified_subjects": ["math"],
+                   "qualified_classes_by_subject": {"math": ["A"]}},
         },
     }
     qs = build_school(raw2)
@@ -139,7 +141,7 @@ def main() -> int:
         assert False, "expected AssignmentError: t1 is not qualified for class B"
     except AssignmentError as e:
         assert "B" in str(e)
-    print("[ok] qualified_classes blocks an out-of-scope auto-assignment")
+    print("[ok] qualified_classes_by_subject blocks an out-of-scope auto-assignment")
 
     # adding a second, unrestricted teacher fixes it
     raw2["teachers"]["t2"] = {"name": "T2", "qualified_subjects": ["math"]}
@@ -148,17 +150,57 @@ def main() -> int:
     tof2, _ = assign_teachers(qs2, qc_units2)
     assert tof2["C:A:math"] == "t1"
     assert tof2["C:B:math"] == "t2"
-    print("[ok] qualified_classes: auto-assignment routes B to the unrestricted teacher")
+    print("[ok] qualified_classes_by_subject: auto-assignment routes B to the unrestricted teacher")
 
     # validator independently rejects a hand-edited swap that breaks it
     res2 = solve(qs2, qc_units2, tof2, max_seconds=10, workers=4)
-    assert res2.lessons, "qualified_classes sample should solve"
+    assert res2.lessons, "qualified_classes_by_subject sample should solve"
     tampered = [PlacedLesson("B", L.subject_id, "t1", L.day, L.period, L.room_id)
                if L.class_id == "B" else L for L in res2.lessons]
     rep2 = validate(qs2, tampered)
     assert any("QUALIFICATION" in v for v in rep2["hard"]), \
         "validator missed a teacher assigned outside their qualified classes"
     print("[ok] validator rejects a teacher placed outside their qualified classes")
+
+    # 9. one teacher scoped DIFFERENTLY per subject — e.g. math for a
+    #    lower-grade class, physics for an upper-grade class, as requested
+    raw3 = {
+        "year": "perSubj", "periods_per_day": 6,
+        "subjects": {"math": {"name_hy": "Մաթ"}, "physics": {"name_hy": "Ֆիզիկա"}},
+        "rooms": {"r1": {"name": "101", "type": "classroom"},
+                 "r2": {"name": "102", "type": "classroom"}},
+        "classes": {
+            "A": {"grade": 6, "home_room": "r1", "weekly_hours": {"math": 2}},
+            "C": {"grade": 10, "home_room": "r2", "weekly_hours": {"physics": 2}},
+        },
+        "teachers": {
+            "t1": {"name": "T1", "qualified_subjects": ["math", "physics"],
+                   "qualified_classes_by_subject": {"math": ["A"], "physics": ["C"]}},
+        },
+    }
+    ps = build_school(raw3)
+    ps_units = build_units(ps)
+    ps_tof, _ = assign_teachers(ps, ps_units)
+    assert ps_tof["C:A:math"] == "t1"
+    assert ps_tof["C:C:physics"] == "t1"
+    print("[ok] one teacher scoped per subject: math -> A, physics -> C")
+
+    ps_res = solve(ps, ps_units, ps_tof, max_seconds=10, workers=4)
+    assert ps_res.lessons, "per-subject scoping sample should solve"
+    ps_clean = validate(ps, ps_res.lessons)
+    assert ps_clean["hard"] == [], ps_clean["hard"]
+    print("[ok] per-subject scoping: clean schedule validates")
+
+    # tamper: reuse t1 for physics at A — t1's physics qualification is
+    # scoped to C only, so this must be rejected even though t1 teaches
+    # physics elsewhere and math at A
+    tampered2 = ([L for L in ps_res.lessons if not (L.class_id == "A" and L.subject_id == "math")]
+                + [PlacedLesson("A", "physics", "t1", 0, 1, "r1"),
+                   PlacedLesson("A", "physics", "t1", 1, 1, "r1")])
+    rep3 = validate(ps, tampered2)
+    assert any("QUALIFICATION" in v for v in rep3["hard"]), \
+        "validator missed a per-subject class-scope violation"
+    print("[ok] validator catches a teacher used outside their per-subject class scope")
 
     print("\nAll checks passed.")
     return 0

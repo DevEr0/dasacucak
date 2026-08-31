@@ -62,20 +62,30 @@ class Teacher:
     #   * a day ABSENT from the map  -> available every period that day (the default);
     #   * a day mapped to []          -> unavailable the whole day.
     available_periods_by_day: dict = field(default_factory=dict)
-    # Which classes (e.g. "7Ա", "8Բ") this teacher may be assigned to teach.
-    #   * empty list -> no restriction (may teach any class, the default);
-    #   * non-empty  -> only the listed classes.
-    qualified_classes: list = field(default_factory=list)
+    # Per-subject class restriction: maps a qualified subject id to the list
+    # of classes (e.g. "7Ա", "8Բ") this teacher may teach THAT subject to.
+    #   * a subject ABSENT from the map (or mapped to []) -> no restriction for
+    #     that subject (may teach it to any class, the default);
+    #   * a subject mapped to a non-empty list -> only those classes for that
+    #     subject.
+    # This lets one teacher be scoped differently per subject, e.g. classes
+    # 5–7 for math but only 9–11 for physics.
+    qualified_classes_by_subject: dict = field(default_factory=dict)
 
     def resolved_cap(self) -> int:
         if self.max_weekly_load is not None:
             return self.max_weekly_load
         return {"primary": 18, "subject": 20, "admin": 12}.get(self.role, 20)
 
-    def can_teach_class(self, class_id: str) -> bool:
-        """True if this teacher may be assigned lessons for `class_id`.
-        An empty `qualified_classes` list means no restriction."""
-        return not self.qualified_classes or class_id in self.qualified_classes
+    def can_teach(self, subject_id: str, class_id: str) -> bool:
+        """True if this teacher may be assigned `subject_id` for `class_id`.
+        Requires the subject to be in `qualified_subjects`; if that subject
+        has a class list in `qualified_classes_by_subject`, `class_id` must
+        be in it, otherwise (no list, or empty list) any class is allowed."""
+        if subject_id not in self.qualified_subjects:
+            return False
+        allowed = self.qualified_classes_by_subject.get(subject_id)
+        return not allowed or class_id in allowed
 
     def can_work(self, day_idx: int, period: int) -> bool:
         # Per-weekday model takes precedence when present.

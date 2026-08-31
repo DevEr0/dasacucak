@@ -104,13 +104,14 @@ def assign_teachers(school: School, units: list[Unit],
             raise AssignmentError(
                 f"No teacher is qualified for subject '{sid}' ({u.label()}).")
         qualified = [t for t in subject_qualified
-                    if all(t.can_teach_class(cid) for cid in unit_classes)]
+                    if all(t.can_teach(sid, cid) for cid in unit_classes)]
         if not qualified:
             raise AssignmentError(
-                f"No teacher qualified for '{sid}' is allowed to teach "
+                f"No teacher qualified for '{sid}' is allowed to teach it to "
                 f"{', '.join(unit_classes)} ({u.label()}). Qualified for the "
                 f"subject: {[t.id for t in subject_qualified]}. Widen one of "
-                f"their allowed classes, or add another qualified teacher.")
+                f"their allowed classes for '{sid}', or add another qualified "
+                f"teacher.")
         fits = [t for t in qualified if load[t.id] + u.hours <= t.resolved_cap()]
         if not fits and not allow_overload:
             raise AssignmentError(
@@ -226,12 +227,14 @@ def preflight(school: School, units: list[Unit], teacher_of: dict):
             fatal.append(f"Class {cls.id}: {week} weekly lessons physically can't "
                          f"fit in {cap_slots} available slots.")
 
-    # teacher qualified_classes sanity --------------------------------------
+    # teacher qualified_classes_by_subject sanity ---------------------------
     for t in school.teachers.values():
-        unknown = [c for c in t.qualified_classes if c not in school.classes]
-        if unknown:
-            fatal.append(f"Teacher {t.name}: qualified_classes references "
-                         f"unknown class(es) {', '.join(unknown)}.")
+        for sid, cls_list in t.qualified_classes_by_subject.items():
+            unknown = [c for c in cls_list if c not in school.classes]
+            if unknown:
+                fatal.append(f"Teacher {t.name}: qualified_classes_by_subject "
+                             f"for '{sid}' references unknown class(es) "
+                             f"{', '.join(unknown)}.")
 
     # teacher load ---------------------------------------------------------
     load = defaultdict(int)

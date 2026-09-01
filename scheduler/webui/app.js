@@ -161,6 +161,22 @@ function secSettings() {
             on: { input: e => (state.maxSeconds = Math.max(3, +e.target.value || 20)) } }),
           state.lang === "hy" ? "Ավելի շատ ժամանակ = ավելի հարթ դասացուցակ" : "More time = a more polished timetable"),
       )),
+    el("div", { class: "card" },
+      el("label", { class: "toggle-row", style: "display:flex;align-items:center;gap:10px;cursor:pointer" },
+        (() => {
+          const cb = el("input", { type: "checkbox",
+            on: { change: e => { s.skip_streams = e.target.checked; render(); } } });
+          if (s.skip_streams) cb.setAttribute("checked", "");
+          return cb;
+        })(),
+        el("span", {},
+          state.lang === "hy"
+            ? "Անտեսել հոսքերը"
+            : "Ignore streams (skip all elective groups)")),
+      el("p", { class: "sub", style: "margin-top:4px" },
+        state.lang === "hy"
+          ? "Ստեղծել դասացուցակ միայն դասարանների առարկաներով, առանց հոսքերին։"
+          : "Generate a schedule using only the regular class subjects, without any stream/elective hours.")),
     complianceCard(),
     el("div", { class: "card" },
       el("span", { class: "eyebrow" }, state.lang === "hy" ? "Կանոնակարգային հիմք" : "Regulatory basis"),
@@ -1099,6 +1115,7 @@ function normalize(raw) {
   s.classes = raw.classes || {}; s.teachers = raw.teachers || {};
   s.assignments = raw.assignments || [];
   s.elective_groups = raw.elective_groups || {};
+  s.skip_streams = !!raw.skip_streams;
   const comp = raw.compliance || {};
   s.compliance = { mode: comp.mode || "strict", relax: comp.relax || [] };
   for (const [, c] of Object.entries(s.classes)) c.weekly_hours = c.weekly_hours || {};
@@ -1119,6 +1136,7 @@ function exportSchool() {
     classes: state.school.classes, teachers: state.school.teachers, assignments: state.school.assignments || [],
     elective_groups: state.school.elective_groups || {},
     compliance: state.school.compliance || { mode: "strict", relax: [] },
+    skip_streams: !!state.school.skip_streams,
   };
   saveBlob(JSON.stringify(out, null, 2), (state.school.year || "school") + ".json", "application/json");
 }

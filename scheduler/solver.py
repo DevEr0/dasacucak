@@ -178,16 +178,19 @@ class _Model:
         def band_active(cid, band, d, p):
             gids = tuple(sorted(g.id for g in s.groups_of_class(cid)
                                 if g.band == band))
-            key = (band, gids, d, p)
+            key = (cid, band, gids, d, p)
             if key in band_cache:
                 return band_cache[key]
+            # only include units where this class actually participates
+            # (per-subject member_classes may differ within a group)
             vs = [uvars[u.uid].get((d, p)) for gid in gids
-                  for u in egroups.get(gid, [])]
+                  for u in egroups.get(gid, [])
+                  if cid in u.member_classes]
             vs = [v for v in vs if v is not None]
             if not vs:
                 band_cache[key] = None
                 return None
-            b = m.NewBoolVar(f"band_{band}_{gids[0]}_{d}_{p}")
+            b = m.NewBoolVar(f"band_{band}_{cid}_{d}_{p}")
             m.AddMaxEquality(b, vs)
             band_cache[key] = b
             return b
@@ -245,6 +248,7 @@ class _Model:
                         s.n_days * s.periods_per_day, f"ow_{cls.id}_{g}")
 
         # ---- band sync: all groups of a band meet at the same slots ---------
+        # Shared (merged) units are excluded — they already serve all groups.
         sync_mode = self._mode("band_sync")
         bands = defaultdict(list)
         for gid, us in egroups.items():
@@ -257,8 +261,10 @@ class _Model:
                 for p in periods:
                     sums = []
                     for gid in gids:
+                        # skip shared units (their uid contains ":shared:")
                         vs = [uvars[u.uid][(d, p)] for u in egroups[gid]
-                              if (d, p) in uvars[u.uid]]
+                              if (d, p) in uvars[u.uid]
+                              and ":shared:" not in u.uid]
                         sums.append(sum(vs) if vs else 0)
                     ref = sums[0]
                     for other in sums[1:]:

@@ -8,6 +8,7 @@ relaxed compliance mode and the infeasibility diagnoser. Run with:
 from __future__ import annotations
 
 import copy
+from collections import defaultdict
 
 from .loader import build_school, load_school
 from .assigner import AssignmentError, assign_teachers, build_units, preflight
@@ -311,6 +312,124 @@ def main() -> int:
         "validator missed a partially-approved teacher on a multi-class stream"
     print("[ok] validator names the specific missing class when a stream "
          "teacher is only partially approved")
+
+    # 12. PER-SUBJECT MEMBER CLASSES within one elective group — e.g.
+    #     one "Science" stream where physics has [10,11] but biology has
+    #     [10,11,12], all sharing the same band so hours don't accumulate
+    raw6 = {
+        "year": "perSubjMembers", "periods_per_day": 7,
+        "subjects": {"physics": {"name_hy": "Ֆdelays"}, "biology": {"name_hy": "Կdelays"}},
+        "rooms": {"r1": {"name": "101", "type": "classroom"},
+                 "r2": {"name": "102", "type": "classroom"}},
+        "classes": {
+            "10": {"grade": 10, "home_room": "r1", "weekly_hours": {}},
+            "11": {"grade": 11, "home_room": "r1", "weekly_hours": {}},
+            "12": {"grade": 12, "home_room": "r2", "weekly_hours": {}},
+        },
+        "elective_groups": {
+            "sci": {"name": "Science", "band": "hosq",
+                   "member_classes": ["10", "11", "12"],
+                   "weekly_hours": {"physics": 3, "biology": 3},
+                   # physics for 10+11 only; biology for all (default)
+                   "subject_classes": {"physics": ["10", "11"]}},
+        },
+        "teachers": {
+            "t1": {"name": "T1", "qualified_subjects": ["physics", "biology"]},
+        },
+    }
+    sc6 = build_school(raw6)
+    sc6_units = build_units(sc6)
+    # physics unit should have member_classes ("10", "11") NOT "12"
+    phys_u = [u for u in sc6_units if u.subject_id == "physics"][0]
+    bio_u = [u for u in sc6_units if u.subject_id == "biology"][0]
+    assert "12" not in phys_u.member_classes, "physics should NOT include class 12"
+    assert "12" in bio_u.member_classes, "biology should include class 12"
+    assert set(phys_u.member_classes) == {"10", "11"}
+    print("[ok] per-subject member_classes: physics has [10,11], biology has [10,11,12]")
+
+    # class "12" should NOT be counted for physics hours
+    from .assigner import _class_week_load
+    load_12 = _class_week_load(sc6, "12", 1)
+    assert load_12 == 3, f"class 12 load should be 3 (biology only), got {load_12}"
+    load_10 = _class_week_load(sc6, "10", 1)
+    assert load_10 == 6, f"class 10 load should be 6 (physics+biology), got {load_10}"
+    print("[ok] per-subject member_classes: weekly load correct per class")
+
+    # solve should work
+    sc6_tof, _ = assign_teachers(sc6, sc6_units)
+    sc6_res = solve(sc6, sc6_units, sc6_tof, max_seconds=15, workers=4)
+    assert sc6_res.lessons, "per-subject member_classes sample should solve"
+    sc6_clean = validate(sc6, sc6_res.lessons)
+    assert sc6_clean["hard"] == [], sc6_clean["hard"]
+    print("[ok] per-subject member_classes: schedule solves and validates")
+
+    # 13. SHARED (COMMON) subjects across streams in the same band.
+    #     Streams "11/physics" and "11/english" both include math 3h.
+    #     Math should produce ONE merged unit, not two.
+    #     Note: physics and english also appear in both streams, so they're
+    #     auto-detected as shared too (with different hours → max used).
+    raw7 = {
+        "year": "sharedSubj", "periods_per_day": 8,
+        "subjects": {"math": {"name_hy": "M"}, "physics": {"name_hy": "P"},
+                    "english": {"name_hy": "E"}, "art": {"name_hy": "A"}},
+        "rooms": {"r1": {"name": "101", "type": "classroom"},
+                 "r2": {"name": "102", "type": "classroom"},
+                 "r3": {"name": "103", "type": "classroom"},
+                 "r4": {"name": "104", "type": "classroom"}},
+        "classes": {
+            "11": {"grade": 11, "home_room": "r1", "weekly_hours": {}},
+        },
+        "elective_groups": {
+            "phys_stream": {"name": "11/phys", "band": "hosq",
+                           "member_classes": ["11"],
+                           "weekly_hours": {"physics": 5, "math": 3, "art": 2}},
+            "eng_stream":  {"name": "11/eng",  "band": "hosq",
+                           "member_classes": ["11"],
+                           "weekly_hours": {"english": 5, "math": 3}},
+        },
+        "teachers": {
+            "t_math": {"name": "Math T", "qualified_subjects": ["math"]},
+            "t_phys": {"name": "Phys T", "qualified_subjects": ["physics"]},
+            "t_eng":  {"name": "Eng T",  "qualified_subjects": ["english"]},
+            "t_art":  {"name": "Art T",  "qualified_subjects": ["art"]},
+        },
+        "compliance": {"mode": "relaxed", "relax": ["band_sync"]},
+    }
+    sh = build_school(raw7)
+    sh_units = build_units(sh)
+    # only ONE math unit (merged), not two
+    math_units = [u for u in sh_units if u.subject_id == "math"]
+    assert len(math_units) == 1, f"expected 1 merged math unit, got {len(math_units)}"
+    assert "shared" in math_units[0].uid
+    print("[ok] shared subjects: math creates ONE merged unit, not two")
+
+    # physics is exclusive to phys_stream, english exclusive to eng_stream
+    phys_units = [u for u in sh_units if u.subject_id == "physics"]
+    assert len(phys_units) == 1 and "shared" not in phys_units[0].uid
+    eng_units = [u for u in sh_units if u.subject_id == "english"]
+    assert len(eng_units) == 1 and "shared" not in eng_units[0].uid
+    print("[ok] exclusive subjects: physics and english each get their own unit")
+
+    # student load: shared math(3) + max(phys_stream excl: 5+2=7, eng_stream excl: 5) = 3+7 = 10
+    sh_load = _class_week_load(sh, "11", 1)
+    assert sh_load == 10, f"expected 10 h/week for class 11, got {sh_load}"
+    print("[ok] shared subjects: class 11 weekly load = 10 (not 13 from double-counting)")
+
+    # teacher: math teacher should get 3h, not 6h
+    sh_tof, _ = assign_teachers(sh, sh_units)
+    teacher_hours = defaultdict(int)
+    for u in sh_units:
+        tid = sh_tof[u.uid]
+        teacher_hours[tid] += u.hours
+    assert teacher_hours["t_math"] == 3, (
+        f"math teacher should be assigned 3h, got {teacher_hours['t_math']}")
+    print("[ok] shared subjects: math teacher assigned 3h (not 6h)")
+
+    sh_res = solve(sh, sh_units, sh_tof, max_seconds=30, workers=4)
+    assert sh_res.lessons, "shared subjects sample should solve"
+    sh_clean = validate(sh, sh_res.lessons)
+    assert sh_clean["hard"] == [], sh_clean["hard"]
+    print("[ok] shared subjects: schedule solves and validates")
 
     print("\nAll checks passed.")
     return 0

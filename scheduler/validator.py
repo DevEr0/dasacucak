@@ -80,7 +80,7 @@ def validate(school: School, lessons: list[PlacedLesson]) -> dict:
                 hard.append(f"ELECTIVE: unknown group '{x.group_id}'.")
                 continue
             group_slot[(x.group_id, x.day, x.period)].append(x)
-            for cid in grp.member_classes:
+            for cid in grp.members_for_subject(x.subject_id):
                 slot_band[(cid, grp.band, x.day, x.period)].add(x.group_id)
         elif x.subgroup:
             slot_split[(x.class_id, x.subgroup, x.day, x.period)].append(x)
@@ -229,8 +229,8 @@ def validate(school: School, lessons: list[PlacedLesson]) -> dict:
         # lesson just checks the class id.
         if x.kind == "elective":
             grp = groups.get(x.group_id)
-            member_classes = grp.member_classes if grp else []
-            scope_ids = [elective_scope_id(x.group_id, cid) for cid in member_classes]
+            members = grp.members_for_subject(x.subject_id) if grp else []
+            scope_ids = [elective_scope_id(x.group_id, cid) for cid in members]
         else:
             scope_ids = [x.class_id]
         bad = [c for c in scope_ids if not t.can_teach(x.subject_id, c)]

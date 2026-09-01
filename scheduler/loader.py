@@ -97,6 +97,9 @@ def build_school(raw: dict) -> School:
             member_classes=[c for c in g.get("member_classes", []) if c in classes],
             weekly_hours={s: int(h) for s, h in g.get("weekly_hours", {}).items()
                           if int(h) > 0},
+            subject_classes={s: [c for c in cs if c in classes]
+                            for s, cs in g.get("subject_classes", {}).items()
+                            if cs},
         )
         for gid, g in raw.get("elective_groups", {}).items()
     }

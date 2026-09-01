@@ -152,7 +152,7 @@ class School:
             self.compliance = Compliance()
 
     def groups_of_class(self, cid: str) -> list:
-        return [g for g in self.elective_groups.values() if cid in g.member_classes]
+        return [g for g in self.elective_groups.values() if g.has_class(cid)]
 
     def bands_of_class(self, cid: str) -> list:
         return sorted({g.band for g in self.groups_of_class(cid)})
@@ -230,16 +230,45 @@ class ElectiveGroup:
     """A stream/elective group: students drawn from several classes who meet
     together for their chosen subjects.  Groups that share member classes but
     have DISJOINT student sets are put in the same *band* and may run in
-    parallel; groups in different bands never overlap for a shared class."""
+    parallel; groups in different bands never overlap for a shared class.
+
+    Per-subject class override: `subject_classes` is an optional dict
+    {subject_id: [class_id, ...]} that, when present for a subject, replaces
+    `member_classes` for THAT subject's lessons only.
+
+    Shared (common) subjects are detected AUTOMATICALLY at build time: if
+    the same subject appears in multiple groups of the same band, it becomes
+    one merged lecture (one unit, one teacher, one time slot, union of
+    member classes). No manual marking needed."""
     id: str
     name: str
     band: str
     member_classes: list = field(default_factory=list)
     weekly_hours: dict = field(default_factory=dict)
+    subject_classes: dict = field(default_factory=dict)  # subject -> [class_ids]
+
+    def members_for_subject(self, sid: str) -> list:
+        """Which classes attend THIS subject's lecture in this group."""
+        return self.subject_classes.get(sid) or self.member_classes
+
+    def has_class(self, cid: str) -> bool:
+        """True if `cid` participates in at least one subject of this group."""
+        if cid in self.member_classes:
+            return True
+        return any(cid in cls for cls in self.subject_classes.values())
 
     @property
     def weekly_total(self) -> int:
         return sum(self.weekly_hours.values())
+
+    def weekly_total_for_class(self, cid: str) -> int:
+        """How many hours per week a student of `cid` would attend in this
+        group (only the subjects where `cid` is a member)."""
+        total = 0
+        for sid, hrs in self.weekly_hours.items():
+            if cid in self.members_for_subject(sid):
+                total += hrs
+        return total
 
 
 @dataclass

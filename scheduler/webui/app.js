@@ -355,18 +355,65 @@ function electiveCard(gid) {
       } } }, cid));
   });
 
-  // subject-hours mini table
+  // subject-hours mini table, with optional per-subject class override
+  g.subject_classes = g.subject_classes || {};
   const hoursHost = el("div", { class: "ghours" });
   Object.entries(g.weekly_hours).forEach(([sid, h]) => {
     const subj = s.subjects[sid];
-    hoursHost.append(el("div", { class: "ghrow" },
+    const override = g.subject_classes[sid] || null;
+    const usingDefault = !override;
+
+    // per-subject class chips
+    const scChips = el("div", { class: "chips sc-chips" });
+    if (!usingDefault) {
+      override.forEach(cid => {
+        scChips.append(el("span", { class: "chip small" }, cid,
+          el("button", { title: t("remove"), on: { click: () => {
+            const cur = (g.subject_classes[sid] || []).filter(x => x !== cid);
+            if (cur.length) g.subject_classes[sid] = cur;
+            else delete g.subject_classes[sid];
+            render();
+          } } }, "×")));
+      });
+      const remaining = classEntries().filter(([cid]) => !override.includes(cid));
+      if (remaining.length) {
+        const csel = el("select", { class: "chip add small", style: "appearance:auto;border-radius:20px",
+          on: { change: e => { if (e.target.value) {
+            g.subject_classes[sid] = [...(g.subject_classes[sid] || []), e.target.value];
+            render();
+          } } } },
+          el("option", { value: "" }, "+ " + (hy ? "դասարան" : "class")));
+        remaining.forEach(([cid]) => csel.append(el("option", { value: cid }, cid)));
+        scChips.append(csel);
+      }
+    } else {
+      scChips.append(el("span", { class: "chip muted small" },
+        (hy ? "բոլորը: " : "all: ") + g.member_classes.join(", ")));
+    }
+    const toggleBtn = el("button", {
+      class: "btn subtle tiny",
+      title: hy ? "Փոխել մասնակից դասարանները" : "Override which classes attend this subject",
+      on: { click: () => {
+        if (usingDefault) {
+          g.subject_classes[sid] = [...g.member_classes];
+        } else {
+          delete g.subject_classes[sid];
+        }
+        render();
+      } }
+    }, usingDefault ? "✎" : "↺");
+
+    hoursHost.append(el("div", { class: "ghrow ghrow-ext" },
       el("span", { class: "gsubj" }, subj ? (nm(subj) || sid) : sid),
       el("input", { type: "number", min: 1, max: 8, value: h, class: "cell",
         on: { input: e => {
           const v = clampInt(e.target.value, 0, 8, 0);
           if (v) g.weekly_hours[sid] = v; else delete g.weekly_hours[sid];
         } } }),
-      rmBtn(() => { delete g.weekly_hours[sid]; render(); })));
+      toggleBtn,
+      rmBtn(() => { delete g.weekly_hours[sid]; delete g.subject_classes[sid];
+render(); }),
+      scChips));
   });
   const addSel = el("select", {});
   addSel.append(el("option", { value: "" }, hy ? "+ առարկա…" : "+ subject…"));
@@ -1058,7 +1105,8 @@ function normalize(raw) {
   for (const [, g] of Object.entries(s.elective_groups)) {
     g.member_classes = g.member_classes || [];
     g.weekly_hours = g.weekly_hours || {};
-    g.band = g.band || "";
+    g.subject_classes = g.subject_classes || {};
+      g.band = g.band || "";
     g.name = g.name || "";
   }
   return s;

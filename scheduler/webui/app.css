@@ -273,8 +273,15 @@ table.tt .r{display:block; color:var(--accent-deep); font-size:11px}
 .chip { border: 1px solid var(--line); background: transparent; border-radius: 999px;
         padding: 4px 12px; cursor: pointer; font: inherit; font-size: 13px; color: var(--ink); }
 .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-.ghours { display: flex; flex-direction: column; gap: 6px; max-width: 420px; }
+.ghours { display: flex; flex-direction: column; gap: 6px; }
 .ghrow { display: flex; align-items: center; gap: 8px; }
+.ghrow-ext { flex-wrap: wrap; }
+.ghrow-ext .sc-chips { flex-basis: 100%; margin-left: 0; margin-top: 2px; }
+.btn.subtle.tiny { font-size: 12px; padding: 1px 5px; line-height: 1.3; min-width: 0; }
+.shared-badge{background:var(--ok-wash, #e0f5e0); border-color:var(--ok, #3a9e3a); color:var(--ok-deep, #1a6b1a); cursor:help}
+.shared-lbl { display: inline-flex; align-items: center; gap: 3px; font-size: 11px;
+  color: var(--ink-faint); cursor: pointer; white-space: nowrap; }
+.shared-lbl.on { color: var(--accent-deep); font-weight: 600; }
 .gsubj { flex: 1; }
 .splitrow { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted);
             margin-top: 4px; cursor: pointer; }

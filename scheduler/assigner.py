@@ -217,8 +217,14 @@ def _class_week_load(school: School, cid: str, subgroup: int) -> int:
     Stream subjects REPLACE class-level subjects (the stream IS the
     student's schedule for those subjects).  So the total is:
       non-stream base hours  +  stream hours (shared once + max exclusive)
-    NOT base + stream on top."""
+    NOT base + stream on top.
+
+    When `school.skip_streams` is True, streams are ignored ENTIRELY — the
+    load is just the class's own subject hours, and no stream hour counts."""
     cls = school.classes[cid]
+
+    if school.skip_streams:
+        return sum(h for h in cls.weekly_hours.values() if h > 0)
 
     by_band: dict = defaultdict(list)
     for g in school.groups_of_class(cid):

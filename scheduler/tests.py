@@ -435,6 +435,50 @@ def main() -> int:
     assert sh_clean["hard"] == [], sh_clean["hard"]
     print("[ok] shared subjects: schedule solves and validates")
 
+    # 14. skip_streams: ALL stream hours are ignored entirely
+    raw8 = {
+        "year": "skip", "periods_per_day": 8, "skip_streams": True,
+        "subjects": {"m": {"name_hy": "M"}, "p": {"name_hy": "P"},
+                    "c": {"name_hy": "C"}},
+        "rooms": {"r1": {"name": "1", "type": "classroom"},
+                 "r2": {"name": "2", "type": "classroom"}},
+        "classes": {
+            "11": {"grade": 11, "home_room": "r1", "weekly_hours": {"m": 4, "p": 3, "c": 3}},
+        },
+        "elective_groups": {
+            "s1": {"name": "11/phys", "band": "h11", "member_classes": ["11"],
+                  "weekly_hours": {"m": 6, "p": 6, "c": 4}},
+            "s2": {"name": "11/bio", "band": "h11", "member_classes": ["11"],
+                  "weekly_hours": {"m": 6, "c": 4}},
+        },
+        "teachers": {
+            "tm": {"name": "TM", "qualified_subjects": ["m"]},
+            "tp": {"name": "TP", "qualified_subjects": ["p"]},
+            "tc": {"name": "TC", "qualified_subjects": ["c"]},
+        },
+    }
+    sk = build_school(raw8)
+    sk_units = build_units(sk)
+    # NO elective units at all
+    assert all(u.kind != "elective" for u in sk_units), \
+        "skip_streams must produce no elective units"
+    # class 11 units cover only its own 4+3+3 = 10 hours
+    class_hours = sum(u.hours for u in sk_units if u.class_id == "11")
+    assert class_hours == 10, f"expected 10 class hours, got {class_hours}"
+    # weekly load ignores streams entirely
+    assert _class_week_load(sk, "11", 1) == 10, \
+        f"skip_streams load should be 10, got {_class_week_load(sk, '11', 1)}"
+    print("[ok] skip_streams: all stream hours ignored, only class hours count")
+
+    sk_tof, _ = assign_teachers(sk, sk_units)
+    sk_fatal, _ = preflight(sk, sk_units, sk_tof)
+    assert not sk_fatal, f"skip_streams preflight should pass: {sk_fatal}"
+    sk_res = solve(sk, sk_units, sk_tof, max_seconds=15, workers=4)
+    assert sk_res.lessons and len(sk_res.lessons) == 10, \
+        f"skip_streams should schedule exactly 10 lessons, got {len(sk_res.lessons)}"
+    assert all(L.kind != "elective" for L in sk_res.lessons)
+    print("[ok] skip_streams: solves with only the 10 class lessons, no overflow")
+
     print("\nAll checks passed.")
     return 0
 

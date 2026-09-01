@@ -16,12 +16,33 @@ class AssignmentError(Exception):
 # 1. Units
 # --------------------------------------------------------------------------
 def build_units(school: School) -> list[Unit]:
-    """Everything that must be placed on the grid, exactly once per kind."""
+    """Everything that must be placed on the grid, exactly once per kind.
+
+    Stream (elective) subjects REPLACE regular class subjects — a student in
+    a stream follows that stream's schedule, NOT the class base + stream on
+    top.  So if a subject appears in a stream the class belongs to, the
+    class-level entry for that subject is suppressed (the stream unit covers
+    it instead).
+
+    When `school.skip_streams` is True, all elective groups are ignored and
+    only regular class subjects are scheduled."""
     units: list[Unit] = []
+
+    # --- figure out which subjects are covered by streams, per class ------
+    stream_subjects_of: dict[str, set] = defaultdict(set)  # cid -> {sid, ...}
+    if not school.skip_streams:
+        for grp in school.elective_groups.values():
+            for sid in grp.weekly_hours:
+                if grp.weekly_hours[sid] > 0:
+                    for cid in grp.members_for_subject(sid):
+                        stream_subjects_of[cid].add(sid)
+
+    # --- regular class units (suppressing stream-covered subjects) --------
     for cls in school.classes.values():
         split_ids = cls.split_subject_ids(school.subjects)
+        covered = stream_subjects_of.get(cls.id, set())
         for sid, hrs in cls.weekly_hours.items():
-            if hrs <= 0:
+            if hrs <= 0 or sid in covered:
                 continue
             if sid in split_ids:
                 for g in (1, 2):
@@ -32,16 +53,15 @@ def build_units(school: School) -> list[Unit]:
                 units.append(Unit(uid=f"C:{cls.id}:{sid}", kind="class",
                                   subject_id=sid, hours=hrs, class_id=cls.id))
 
-    # ---- elective units ---------------------------------------------------
-    # Within a band, if multiple groups list the SAME subject, that subject
-    # is taught as ONE shared lecture (all groups' students sit together).
-    # We detect this automatically and merge into a single unit.
+    if school.skip_streams:
+        return units
+
+    # --- elective units (auto-merge shared subjects per band) -------------
     by_band: dict[str, list] = defaultdict(list)
     for grp in school.elective_groups.values():
         by_band[grp.band].append(grp)
 
     for band, grps in by_band.items():
-        # map subject -> list of groups in this band that have it
         subj_grps: dict[str, list] = defaultdict(list)
         for grp in grps:
             for sid in grp.weekly_hours:
@@ -50,7 +70,7 @@ def build_units(school: School) -> list[Unit]:
 
         for sid, gs in subj_grps.items():
             if len(gs) > 1:
-                # shared subject: one merged unit, union of member_classes
+                # shared: one merged unit, union of member_classes
                 all_members: set = set()
                 max_hrs = 0
                 for g in gs:
@@ -60,11 +80,10 @@ def build_units(school: School) -> list[Unit]:
                 units.append(Unit(
                     uid=f"E:{band}:shared:{sid}",
                     kind="elective", subject_id=sid, hours=max_hrs,
-                    group_id=gs[0].id,          # reference first group
+                    group_id=gs[0].id,
                     member_classes=tuple(sorted(all_members)),
                     band=band))
             else:
-                # exclusive to one group
                 grp = gs[0]
                 hrs = grp.weekly_hours[sid]
                 members = grp.members_for_subject(sid)
@@ -193,28 +212,38 @@ def assign_teachers(school: School, units: list[Unit],
 # 3. Preflight
 # --------------------------------------------------------------------------
 def _class_week_load(school: School, cid: str, subgroup: int) -> int:
-    """Weekly lessons a student of `cid` (in the given subgroup) sits through:
-    whole-class + split lessons + one stream per band.
-    Within a band, subjects appearing in MULTIPLE groups are shared (one
-    lecture for everyone, counted once). Unique subjects count via max across
-    streams (student picks one stream)."""
+    """Weekly lessons a student of `cid` sits through.
+
+    Stream subjects REPLACE class-level subjects (the stream IS the
+    student's schedule for those subjects).  So the total is:
+      non-stream base hours  +  stream hours (shared once + max exclusive)
+    NOT base + stream on top."""
     cls = school.classes[cid]
-    base = sum(h for s, h in cls.weekly_hours.items())
 
     by_band: dict = defaultdict(list)
     for g in school.groups_of_class(cid):
         by_band[g.band].append(g)
 
+    # subjects covered by ANY stream this class is in
+    stream_sids: set = set()
+    for grps in by_band.values():
+        for g in grps:
+            for sid in g.weekly_hours:
+                if g.weekly_hours[sid] > 0 and cid in g.members_for_subject(sid):
+                    stream_sids.add(sid)
+
+    # base = only subjects NOT handled by a stream
+    base = sum(h for sid, h in cls.weekly_hours.items() if sid not in stream_sids)
+
+    # stream hours per band
     band_total = 0
     for band, grps in by_band.items():
-        # collect: subject -> [(group, hours)] for subjects this class attends
         subj_entries: dict = defaultdict(list)
         for g in grps:
             for sid, hrs in g.weekly_hours.items():
                 if hrs > 0 and cid in g.members_for_subject(sid):
                     subj_entries[sid].append((g, hrs))
 
-        # shared subjects (in 2+ groups) count once (max hours)
         shared_hours = 0
         excl_by_group: dict = defaultdict(int)
         for sid, pairs in subj_entries.items():
@@ -224,7 +253,6 @@ def _class_week_load(school: School, cid: str, subgroup: int) -> int:
             else:
                 excl_by_group[pairs[0][0].id] += max_hrs
 
-        # student picks the stream with the most exclusive hours
         max_excl = max(excl_by_group.values(), default=0)
         band_total += shared_hours + max_excl
 
@@ -243,25 +271,26 @@ def preflight(school: School, units: list[Unit], teacher_of: dict):
     relaxed = school.compliance.is_relaxed
 
     # elective sanity ------------------------------------------------------
-    for grp in school.elective_groups.values():
-        if not grp.member_classes:
-            fatal.append(f"Elective group {grp.name}: no member classes "
-                         f"(or none that exist).")
-        if not grp.weekly_hours:
-            fatal.append(f"Elective group {grp.name}: no weekly hours set.")
-    by_band = defaultdict(list)
-    for grp in school.elective_groups.values():
-        by_band[grp.band].append(grp)
-    for band, grps in by_band.items():
-        totals = {g.weekly_total for g in grps}
-        if len(totals) > 1:
-            legal.append({
-                "rule": "student_weekly_cap",
-                "message": (f"Band '{band}': groups have different weekly totals "
-                            f"{sorted(totals)} — students in smaller groups will "
-                            f"have free slots while others study."),
-                "law": "Consistency warning",
-            })
+    if not school.skip_streams:
+        for grp in school.elective_groups.values():
+            if not grp.member_classes:
+                fatal.append(f"Elective group {grp.name}: no member classes "
+                             f"(or none that exist).")
+            if not grp.weekly_hours:
+                fatal.append(f"Elective group {grp.name}: no weekly hours set.")
+        by_band = defaultdict(list)
+        for grp in school.elective_groups.values():
+            by_band[grp.band].append(grp)
+        for band, grps in by_band.items():
+            totals = {g.weekly_total for g in grps}
+            if len(totals) > 1:
+                legal.append({
+                    "rule": "student_weekly_cap",
+                    "message": (f"Band '{band}': groups have different weekly totals "
+                                f"{sorted(totals)} — students in smaller groups will "
+                                f"have free slots while others study."),
+                    "law": "Consistency warning",
+                })
 
     # student load ---------------------------------------------------------
     for cls in school.classes.values():

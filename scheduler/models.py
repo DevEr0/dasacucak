@@ -146,6 +146,7 @@ class School:
     weights: dict = field(default_factory=dict)
     elective_groups: dict = field(default_factory=dict)   # id -> ElectiveGroup
     compliance: "Compliance" = None
+    skip_streams: bool = False                            # ignore electives entirely
 
     def __post_init__(self):
         if self.compliance is None:

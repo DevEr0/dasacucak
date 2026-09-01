@@ -151,4 +151,5 @@ def build_school(raw: dict) -> School:
         grade_rules=grade_rules, subjects=subjects, classes=classes,
         teachers=teachers, rooms=rooms, assignments=assignments, weights=weights,
         elective_groups=elective_groups, compliance=compliance,
+        skip_streams=bool(raw.get("skip_streams", False)),
     )

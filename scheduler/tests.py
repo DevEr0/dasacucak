@@ -58,11 +58,15 @@ def main() -> int:
         by_slot.setdefault((L.day, L.period), set()).add(L.group_id)
     assert all(gs == {"g10_sci", "g10_hum"} for gs in by_slot.values()), \
         "stream groups not synchronised"
-    # stream subject is separate from the class's own lessons in that subject
+    # stream subject REPLACES the class's own lessons for that subject —
+    # there should be no separate class-level hanrahashiv for 10Ա since the
+    # stream covers it
     own_alg = [L for L in res.lessons
                if L.kind == "class" and L.class_id == "10Ա"
                and L.subject_id == "hanrahashiv"]
-    assert len(own_alg) == 2, "class' own algebra hours were displaced"
+    assert len(own_alg) == 0, (
+        f"class 10Ա should NOT have separate algebra — the stream covers it, "
+        f"but found {len(own_alg)}")
     print(f"[ok] {len(el)} stream lessons in {len(by_slot)} synced band slots")
 
     # 4. a duplicated lesson is caught
